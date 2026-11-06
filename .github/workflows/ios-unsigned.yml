@@ -16,7 +16,9 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: |
+          mkdir -p Generated
+          xcodegen generate
       - name: Build unsigned app
         run: |
           xcodebuild -project ChromeHearts.xcodeproj \

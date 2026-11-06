@@ -18,6 +18,7 @@ targets:
     sources:
       - path: Sources
     info:
+      path: Generated/ChromeHearts-Info.plist
       properties:
         CFBundleURLTypes:
           - CFBundleURLSchemes:
