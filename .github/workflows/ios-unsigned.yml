@@ -1,0 +1,41 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build unsigned app
+        run: |
+          xcodebuild -project ChromeHearts.xcodeproj \
+            -scheme ChromeHearts \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            PRODUCT_BUNDLE_IDENTIFIER=fi.chromehearts.cards \
+            -derivedDataPath build/DerivedData build
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/DerivedData/Build/Products/Release-iphoneos/ChromeHearts.app build/Payload/
+          cd build && /usr/bin/zip -r ChromeHearts-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChromeHearts-unsigned-ipa
+          path: build/ChromeHearts-unsigned.ipa
+          if-no-files-found: error
