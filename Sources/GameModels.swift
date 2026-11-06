@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum Suit: String, CaseIterable, Codable, Identifiable {
     case spades, clubs, diamonds, hearts

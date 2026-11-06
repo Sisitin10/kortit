@@ -17,8 +17,14 @@ final class FirebaseService {
     static let shared = FirebaseService()
     private init() {}
 
-    private var apiKey: String? { ProcessInfo.processInfo.environment["FIREBASE_API_KEY"] ?? Bundle.main.object(forInfoDictionaryKey: "FIREBASE_API_KEY") as? String }
-    private var databaseURL: String? { ProcessInfo.processInfo.environment["FIREBASE_DATABASE_URL"] ?? Bundle.main.object(forInfoDictionaryKey: "FIREBASE_DATABASE_URL") as? String }
+    private var apiKey: String? { configuredValue("FIREBASE_API_KEY") }
+    private var databaseURL: String? { configuredValue("FIREBASE_DATABASE_URL") }
+
+    private func configuredValue(_ key: String) -> String? {
+        let value = ProcessInfo.processInfo.environment[key] ?? Bundle.main.object(forInfoDictionaryKey: key) as? String
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return value
+    }
 
     func authenticate(email: String, password: String, create: Bool) async throws -> String {
         guard let apiKey else { throw OnlineError.missingConfiguration }
