@@ -1,4 +1,4 @@
-name: Build unsigned iOS IPA
+name: Build iOS IPA (unsigned)
 
 on:
   workflow_dispatch:
@@ -24,18 +24,30 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            FIREBASE_DATABASE_URL="$FIREBASE_DATABASE_URL" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             PRODUCT_BUNDLE_IDENTIFIER=fi.chromehearts.cards \
-            -derivedDataPath build/DerivedData build
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" build
       - name: Package unsigned IPA
         run: |
-          mkdir -p build/Payload
-          cp -R build/DerivedData/Build/Products/Release-iphoneos/ChromeHearts.app build/Payload/
-          cd build && /usr/bin/zip -r ChromeHearts-unsigned.ipa Payload
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/ChromeHearts.app" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qr "$GITHUB_WORKSPACE/ChromeHearts-unsigned.ipa" Payload
+      - name: Add download instructions to run summary
+        run: |
+          {
+            echo '## iOS build ready'
+            echo ''
+            echo 'Download **ChromeHearts-unsigned.ipa** from the Artifacts section below this workflow run.'
+            echo ''
+            echo 'This IPA is unsigned and cannot be installed directly on an iPhone. Sign it with a valid Apple provisioning profile first.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: ChromeHearts-unsigned-ipa
-          path: build/ChromeHearts-unsigned.ipa
+          path: ChromeHearts-unsigned.ipa
           if-no-files-found: error
+          retention-days: 14
