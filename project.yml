@@ -20,7 +20,7 @@ targets:
       path: Generated/ChromeHearts-Info.plist
       properties:
         UIUserInterfaceStyle: Light
-        UIRequiresFullScreen: true
+        UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: Skannaa QR-koodi liittyäksesi pelikaverin huoneeseen.
