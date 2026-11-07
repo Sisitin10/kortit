@@ -31,7 +31,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: fi.chromehearts.cards
         TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_KEY_CFBundleDisplayName: Chrome Hearts
+        INFOPLIST_KEY_CFBundleDisplayName: Korttipelit
         INFOPLIST_KEY_FIREBASE_DATABASE_URL: $(FIREBASE_DATABASE_URL)
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO

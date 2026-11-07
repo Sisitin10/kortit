@@ -1,83 +1,87 @@
 import SwiftUI
 
-struct VelvetBackground: View {
+struct AppCanvas: View {
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Color(red: 0.965, green: 0.958, blue: 0.938)
-                LinearGradient(colors: [.white.opacity(0.84), .clear, Color(red: 0.92, green: 0.90, blue: 0.86).opacity(0.34)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                VStack(spacing: 26) {
-                    ForEach(0..<(Int(proxy.size.height / 70) + 2), id: \.self) { row in
-                        HStack(spacing: 32) {
-                            ForEach(0..<(Int(proxy.size.width / 64) + 2), id: \.self) { _ in
-                                BrandCross(size: 22, color: .black.opacity(0.025))
-                            }
-                        }.offset(x: row.isMultiple(of: 2) ? 0 : 32)
-                    }
-                }
-            }.ignoresSafeArea()
-        }
+        Color(red: 0.97, green: 0.965, blue: 0.95)
+            .ignoresSafeArea()
     }
 }
 
-struct BrandCross: View {
+struct BrandMark: View {
     var size: CGFloat
-    var color: Color
+    var color: Color = Color(red: 0.28, green: 0.27, blue: 0.25)
+
     var body: some View {
-        ZStack {
-            ForEach(0..<4) { index in
-                Capsule().fill(color).frame(width: size * 0.25, height: size * 0.48).offset(y: -size * 0.22).rotationEffect(.degrees(Double(index) * 90))
-                Capsule().stroke(color, lineWidth: max(0.7, size * 0.025)).frame(width: size * 0.34, height: size * 0.58).offset(y: -size * 0.22).rotationEffect(.degrees(Double(index) * 90))
-            }
-            Circle().fill(color).frame(width: size * 0.2, height: size * 0.2)
-            Circle().stroke(color, lineWidth: max(0.8, size * 0.035)).frame(width: size * 0.32, height: size * 0.32)
-        }.frame(width: size, height: size)
+        Image("BrandMark")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(color)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
-struct PremiumGlass: ViewModifier {
-    var cornerRadius: CGFloat = 22
+private struct CleanSurface: ViewModifier {
+    var cornerRadius: CGFloat
+
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        } else {
-            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        }
+        content
+            .background(.white, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.black.opacity(0.07), lineWidth: 1)
+            }
     }
 }
 
 extension View {
-    func premiumGlass(cornerRadius: CGFloat = 22) -> some View { modifier(PremiumGlass(cornerRadius: cornerRadius)) }
+    func cleanSurface(cornerRadius: CGFloat = 18) -> some View {
+        modifier(CleanSurface(cornerRadius: cornerRadius))
+    }
 }
 
 struct PlayingCardView: View {
     let card: PlayingCard
-    private var ink: Color { card.suit.isRed ? Color(red: 0.67, green: 0.11, blue: 0.14) : Color(red: 0.08, green: 0.08, blue: 0.085) }
+
+    private var ink: Color {
+        card.suit.isRed ? Color(red: 0.67, green: 0.12, blue: 0.15) : Color(red: 0.10, green: 0.10, blue: 0.10)
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let w = proxy.size.width
-            let h = proxy.size.height
+            let width = proxy.size.width
+            let labelSize = max(9, min(16, width * 0.25))
             ZStack {
-                Image("CardFace").resizable().scaledToFill().frame(width: w, height: h).clipped()
-                RoundedRectangle(cornerRadius: max(8, w * 0.09)).stroke(.black.opacity(0.28), lineWidth: 0.8)
+                Image("CardFace")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width, height: proxy.size.height)
+                    .clipped()
+
+                RoundedRectangle(cornerRadius: max(7, width * 0.09), style: .continuous)
+                    .stroke(Color.black.opacity(0.15), lineWidth: 0.8)
+
                 VStack {
-                    cornerLabel
+                    cornerLabel(size: labelSize)
                     Spacer(minLength: 0)
-                    cornerLabel.rotationEffect(.degrees(180))
-                }.padding(.horizontal, w * 0.08).padding(.vertical, h * 0.04)
+                    cornerLabel(size: labelSize).rotationEffect(.degrees(180))
+                }
+                .padding(.horizontal, width * 0.08)
+                .padding(.vertical, proxy.size.height * 0.04)
             }
-            .clipShape(RoundedRectangle(cornerRadius: max(8, w * 0.09), style: .continuous))
-            .shadow(color: .black.opacity(0.15), radius: 5, x: 0, y: 3)
+            .clipShape(RoundedRectangle(cornerRadius: max(7, width * 0.09), style: .continuous))
             .accessibilityLabel("\(card.label) \(card.suit.glyph)")
-        }.aspectRatio(0.64, contentMode: .fit)
+        }
+        .aspectRatio(0.64, contentMode: .fit)
     }
 
-    private var cornerLabel: some View {
+    private func cornerLabel(size: CGFloat) -> some View {
         VStack(spacing: -2) {
-            Text(card.label).font(.system(size: 16, weight: .bold, design: .serif)).minimumScaleFactor(0.7)
-            Text(card.suit.glyph).font(.system(size: 13, weight: .bold))
-        }.foregroundStyle(ink).shadow(color: .white.opacity(0.65), radius: 2)
+            Text(card.label).font(.system(size: size, weight: .bold))
+            Text(card.suit.glyph).font(.system(size: size * 0.86, weight: .semibold))
+        }
+        .foregroundStyle(ink)
     }
 }
 
@@ -89,10 +93,13 @@ struct CardBackView: View {
                 .scaledToFill()
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: max(8, proxy.size.width * 0.09), style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: max(8, proxy.size.width * 0.09), style: .continuous).stroke(.white.opacity(0.68), lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 7, x: 0, y: 4)
+                .clipShape(RoundedRectangle(cornerRadius: max(7, proxy.size.width * 0.09), style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: max(7, proxy.size.width * 0.09), style: .continuous)
+                        .stroke(Color.black.opacity(0.12), lineWidth: 0.8)
+                }
                 .accessibilityLabel("Kortin selkäpuoli")
-        }.aspectRatio(0.64, contentMode: .fit)
+        }
+        .aspectRatio(0.64, contentMode: .fit)
     }
 }

@@ -1,4 +1,4 @@
-name: Build iOS IPA (unsigned)
+name: Build and release Korttipelit IPA
 
 on:
   workflow_dispatch:
@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: macos-26
+    permissions:
+      contents: write
     env:
       FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
     steps:
@@ -38,19 +40,30 @@ jobs:
             cp "$GITHUB_WORKSPACE/GoogleService-Info.plist" "$app/GoogleService-Info.plist"
           fi
           cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
-          cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qr "$GITHUB_WORKSPACE/ChromeHearts-unsigned.ipa" Payload
+          cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qr "$GITHUB_WORKSPACE/Korttipelit-unsigned.ipa" Payload
       - name: Add download instructions to run summary
         run: |
           {
             echo '## iOS build ready'
             echo ''
-            echo 'Download **ChromeHearts-unsigned.ipa** from the Artifacts section below this workflow run.'
+            echo 'Download **Korttipelit-unsigned.ipa** from the Artifacts section below this workflow run.'
             echo ''
             echo 'This IPA is unsigned and cannot be installed directly on an iPhone. Sign it with a valid Apple provisioning profile first.'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: ChromeHearts-unsigned-ipa
-          path: ChromeHearts-unsigned.ipa
+          name: Korttipelit-unsigned-ipa
+          path: Korttipelit-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
+      - name: Publish GitHub Release
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${GITHUB_RUN_ID}"
+          gh release create "$tag" "$GITHUB_WORKSPACE/Korttipelit-unsigned.ipa" \
+            --target "$GITHUB_SHA" \
+            --title "Korttipelit build ${GITHUB_RUN_NUMBER}" \
+            --notes "Automaattinen iOS-build. IPA on allekirjoittamaton." \
+            --latest
