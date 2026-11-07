@@ -3,13 +3,11 @@ name: Build iOS IPA (unsigned)
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
-      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
       FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +24,6 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            FIREBASE_API_KEY="$FIREBASE_API_KEY" \
             FIREBASE_DATABASE_URL="$FIREBASE_DATABASE_URL" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -36,7 +33,11 @@ jobs:
       - name: Package unsigned IPA
         run: |
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
-          cp -R "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/ChromeHearts.app" "$RUNNER_TEMP/ipa/Payload/"
+          app="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/ChromeHearts.app"
+          if [ -f "$GITHUB_WORKSPACE/GoogleService-Info.plist" ]; then
+            cp "$GITHUB_WORKSPACE/GoogleService-Info.plist" "$app/GoogleService-Info.plist"
+          fi
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
           cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qr "$GITHUB_WORKSPACE/ChromeHearts-unsigned.ipa" Payload
       - name: Add download instructions to run summary
         run: |

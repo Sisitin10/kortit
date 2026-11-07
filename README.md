@@ -1,36 +1,29 @@
-# Chrome Hearts — suomalaiset korttipelit
+# Chrome Hearts — korttipelit iPhonelle
 
-Portrait-tilaan tehty iOS-korttipelisovellus. Kakkahousussa ja Mustassa Maijassa on korttikäsi, pakka, pöytä, vuorot, animaatiot ja äänipalaute. Online-huoneessa host jakaa QR-koodin tai kuusimerkkisen huonekoodin. Sovelluksen tämänhetkiset säännöt ovat kevyet ystäväpeliversiot.
+Portrait-SwiftUI-sovellus Kakkahousulle ja Mustalle Maijalle. Käyttöliittymä on vaalea ja koko ruudun mukainen. Korttien etu- ja takapuoli käyttävät projektin Assets-kansioon kopioituja käyttäjän referenssikuvia. iOS 26:ssa käyttöliittymän korttipaneelit käyttävät SwiftUIn natiivia Liquid Glass -efektiä; vanhemmissa tuetuissa iOS-versioissa käytetään järjestelmän `Material`-pintaa.
 
-## Rakenna GitHubissa ilman Macia
+## Build ilman Macia
 
-Workflow käyttää GitHubin macOS-runneria ja Xcodea. Sinun ei tarvitse asentaa Xcodea omalle koneelle. Buildin voi käynnistää myös puhelimen selaimella:
+GitHub Actions rakentaa iOS-sovelluksen GitHubin macOS-26-runnerilla ja Xcodella. Pushaa muutokset mille tahansa haaralle tai käynnistä **Actions → Build iOS IPA (unsigned) → Run workflow**. Buildin jälkeen lataa `ChromeHearts-unsigned-ipa` Actions-ajon **Artifacts**-osiosta. Artefakti säilyy 14 päivää.
 
-1. Laita projektin tiedostot GitHub-repoon. Repon juureen kuuluvat mm. `project.yml`, `Sources/`, `.github/workflows/` ja `database.rules.json`.
-2. Lisää Firebase-arvot repon **Settings → Secrets and variables → Actions → New repository secret** -kohdassa. Lisää nimet `FIREBASE_API_KEY` ja `FIREBASE_DATABASE_URL` alla olevien Firebase-ohjeiden mukaan.
-3. Avaa repon **Actions → Build iOS IPA (unsigned) → Run workflow** ja käynnistä ajo.
-4. Kun ajo on vihreä, avaa sen sivu. Lataa **Artifacts**-osiosta `ChromeHearts-unsigned-ipa`-paketti. Sen sisältä löytyy `ChromeHearts-unsigned.ipa`. Artefakti säilyy 14 päivää.
+IPA on allekirjoittamaton, eikä iPhone asenna sitä sellaisenaan. Puhelimeen asentaminen vaatii Apple-allekirjoituksen ja provisioning-profiilin.
 
-Workflow rakentaa iOS-sovelluksen pilvessä `xcodebuild`illa, paketoi sen IPA:ksi ja julkaisee sen Actions-artefaktina. IPA on allekirjoittamaton. iPhone ei asenna sitä suoraan: laitteelle jakaminen vaatii Applelta kelvollisen allekirjoituksen ja provisioning-profiilin. Tämä workflow ei pyydä Apple-tunnuksia eikä allekirjoita sovellusta. [Applen ohje rekisteröidyille testilaitteille jakamisesta](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices) kertoo allekirjoituksen ja profiilin vaatimuksista.
+## Firebase
 
-## Firebase: kirjautuminen ja online-peli
+Firebase Authentication hoitaa sähköposti-/salasanakirjautumisen. Realtime Database välittää huoneet, kortit ja vuorot laitteiden välillä Firebase REST -rajapinnan tapahtumavirralla.
 
-Firebase-projekti hoitaa molemmat eri palveluilla:
+Kakkahousua voi harjoitella yksin. Musta Maija pelataan online-huoneessa, jossa tarvitaan vähintään kaksi pelaajaa. Kirjautuminen tehdään Firebase Authenticationin sähköposti-/salasanatoiminnolla; Google-kirjautumista ei ole kytketty.
 
-- **Firebase Authentication** tarkistaa pelaajan sähköpostin ja salasanan.
-- **Realtime Database** tallentaa huoneen, pelaajat, kortit ja vuoron, jotta muiden laitteiden peli päivittyy.
+1. Firebase Consolessa ota käyttöön **Authentication → Sign-in method → Email/Password**.
+2. Luo **Realtime Database**. Sen URL löytyy Realtime Database -näkymästä.
+3. Rekisteröi iOS-sovellus bundle ID:llä `fi.chromehearts.cards` ja lataa `GoogleService-Info.plist`. Lisää tiedosto sellaisenaan GitHub-repon juureen. Actions lisää sen rakennetun sovelluksen sisään; API key luetaan tiedoston `API_KEY`-kentästä.
+4. Julkaise projektin `database.rules.json` Firebase Consolen **Realtime Database → Rules** -näkymässä. Nykyiset säännöt vaativat kirjautumisen.
+5. Jos asetustiedostossa ei ole `DATABASE_URL`-kenttää, lisää Realtime Database -näkymän URL GitHub-repon **Settings → Secrets and variables → Actions** -kohtaan nimellä `FIREBASE_DATABASE_URL`. `FIREBASE_API_KEY`-salaisuutta ei tarvitse lisätä. Ilman tietokannan URL:ia sovellus rakentuu, mutta huoneet eivät yhdisty.
 
-Tee Firebase Consolessa seuraavat asetukset:
+Nykyiset RTDB-säännöt sallivat kirjautuneille käyttäjille huoneen kaikkien tietojen lukemisen ja kirjoittamisen. Pelitila sisältää myös kaikkien pelaajien käsikortit, joten malli sopii kokeiluun mutta ei estä huijaamista eikä sovi julkaistavan kilpailupelin tietosuojaksi. Tuotantoversio tarvitsee palvelinpuolen siirtojen tarkistuksen ja pelaajakohtaisesti suojatut käsikortit.
 
-1. Avaa projektisi **Project settings → General**. Lisää iOS-sovellus bundle ID:llä `fi.chromehearts.cards`. Kopioi projektin **Web API Key**; nykyinen sovellus käyttää Firebase REST-rajapintaa, joten `GoogleService-Info.plist`-tiedostoa ei tarvita.
-2. Avaa **Authentication → Sign-in method** ja ota käyttöön **Email/Password**. Sovelluksen kirjautumisruutu voi sen jälkeen luoda tilin tai kirjautua sisään. Google-kirjautumista ei ole vielä kytketty.
-3. Avaa **Realtime Database → Create database**. Valitse tietokannan sijainti ja luo tietokanta.
-4. Kopioi Consolen näyttämä tietokannan URL, esimerkiksi `https://oma-projekti-default-rtdb.europe-west1.firebasedatabase.app`.
-5. Julkaise repon `database.rules.json` Firebase Consolen **Realtime Database → Rules** -välilehdellä. Nykyiset säännöt vaativat kirjautumisen, mutta sallivat kaikille kirjautuneille käyttäjille luku- ja kirjoitusoikeuden huonereitteihin. Tämä sopii prototyypin kokeiluun, ei tuotantoon.
-6. Lisää API key ja tietokannan URL GitHubin Actions-secreteihin täsmälleen nimillä `FIREBASE_API_KEY` ja `FIREBASE_DATABASE_URL`. Käynnistä workflow uudelleen, jotta arvot päätyvät rakennettuun sovellukseen.
+## Pelisäännöt
 
-Ilman näitä kahta salaisuutta IPA kyllä rakentuu, mutta online-kirjautumisella ja huoneilla ei ole yhteyttä Firebaseen. Kirjautumisruudun **Jatka vieraana** toimii vain paikallisessa pelitilassa.
+Kakkahousu käyttää viiden kortin kättä. Kakkonen on erikoiskortti; kymppi kaataa 3–9 pinon ja ässä kuvakorttipinon. Pakan ollessa jäljellä käsi täydennetään viiteen, ja pinon voi joutua nostamaan. Kuvakorttien pelattavuuden alaraja 7, 8 tai 9 valitaan huoneen hostin asetuksista. Paskahousun säännöissä on alueellisia muunnelmia, joten asetus tekee yleisimmästä kiistakohdasta muokattavan. [Paskahousu / Wikipedia](https://en.wikipedia.org/wiki/Paskahousu)
 
-## Pelien säännöt
-
-Kakkahousussa pelataan 1–4 samanarvoista korttia, ja pöydän päälle pelataan vähintään yhtä korkeaa arvoa; pelaaja voi nostaa pöydän. Kättä täydennetään nostamalla pakasta. Mustassa Maijassa pata-rouvaa ei voi pelata pois kädestä. Alueellisia sääntövariantteja tai Google-kirjautumista ei ole vielä asetuksina.
+Mustassa Maijassa jaetaan viisi korttia, käännetään valtti (pata ei kelpaa), hyökätään saman maan korteilla ja puolustaja kaataa korkeamman saman maan kortilla tai valtilla. Patarouva ei kaadu. [Musta Maija / Wikipedia](https://en.wikipedia.org/wiki/Musta_Maija)
