@@ -8,7 +8,7 @@ private enum AppPalette {
     static let ink = Color(red: 0.13, green: 0.13, blue: 0.13)
     static let muted = Color(red: 0.42, green: 0.41, blue: 0.39)
     static let accent = Color(red: 0.40, green: 0.13, blue: 0.16)
-    static let paper = Color(red: 0.97, green: 0.965, blue: 0.95)
+    static let paper = Color(red: 0.94, green: 0.945, blue: 0.95)
 }
 
 struct ContentView: View {
@@ -27,16 +27,21 @@ struct ContentView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        TabView(selection: $activeTab) {
+        Group {
+            if screen == .table {
+                tableView
+            } else {
+                TabView(selection: $activeTab) {
             gameTab
                 .tabItem { Label("Pelit", systemImage: "suit.spade.fill") }
                 .tag(0)
             accountTab
                 .tabItem { Label("Tili", systemImage: "person.crop.circle") }
                 .tag(1)
+                }
+            }
         }
         .tint(AppPalette.ink)
-        .toolbar(screen == .table ? .hidden : .visible, for: .tabBar)
         .sheet(isPresented: $showSignIn) { signInSheet }
         .sheet(isPresented: $showScanner) {
             QRScanner { code in
@@ -70,7 +75,7 @@ struct ContentView: View {
                 } else {
                     roomLobby.transition(.opacity)
                 }
-            case .table: tableView.transition(.opacity)
+            case .table: EmptyView()
             }
         }
         .animation(.easeInOut(duration: 0.24), value: screen)
@@ -342,17 +347,16 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!game.turn || game.game == .mustaMaija)
-                        Text("Pakka · \(game.deckCount)").font(.system(size: 11, weight: .medium)).foregroundStyle(AppPalette.muted)
                     }
 
                     Spacer(minLength: 0)
 
                     VStack(spacing: 6) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .fill(Color.white.opacity(0.7))
-                                .frame(width: min(86, proxy.size.width * 0.23), height: min(118, proxy.size.width * 0.31))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 1))
+                                .frame(width: min(86, proxy.size.width * 0.23), height: min(134, proxy.size.width * 0.35))
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.black.opacity(0.14), lineWidth: 1))
                             if let top = game.tableCards.last {
                                 PlayingCardView(card: top)
                                     .frame(width: min(62, proxy.size.width * 0.165))
@@ -366,18 +370,10 @@ struct ContentView: View {
                                 Text("Pöytä tyhjä").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                             }
                         }
-                        Text(game.game == .mustaMaija ? "Valtti · \(game.maijaTrumpSuit?.glyph ?? "–")" : "Pöytä · \(game.tableCards.count)")
-                            .font(.system(size: 11, weight: .medium)).foregroundStyle(AppPalette.muted)
                     }
 
                     Spacer(minLength: 0)
 
-                    VStack(alignment: .trailing, spacing: 7) {
-                        let others = room?.players.values.filter { $0.id != playerID }.sorted { $0.id < $1.id } ?? []
-                        ForEach(others.prefix(3)) { player in playerBadge(player.name, count: player.handCount) }
-                        playerBadge(session.displayName, count: game.hand.count, isLocal: true)
-                    }
-                    .frame(maxWidth: proxy.size.width * 0.30, alignment: .trailing)
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, max(16, proxy.size.height * 0.025))
@@ -411,40 +407,26 @@ struct ContentView: View {
 
                 Spacer(minLength: 6)
 
-                if !game.selected.isEmpty, let preview = game.hand.first(where: { game.selected.contains($0.id) }) {
-                    HStack(spacing: 12) {
-                        PlayingCardView(card: preview).frame(width: 48)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Valittu kortti").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
-                            Text("\(preview.label) \(preview.suit.glyph)").font(.system(size: 16, weight: .semibold))
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 4)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: -min(22, proxy.size.width * 0.055)) {
+                    HStack(spacing: -min(36, proxy.size.width * 0.09)) {
                         ForEach(game.hand) { card in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) { game.toggle(card) }
                             } label: {
                                 PlayingCardView(card: card)
-                                    .frame(width: min(58, max(38, (proxy.size.width - 42) / CGFloat(max(game.hand.count, 6)))) )
-                                    .offset(y: game.selected.contains(card.id) ? -12 : 0)
-                                    .rotationEffect(.degrees(handAngle(for: card)))
+                                    .frame(width: min(86, max(62, (proxy.size.width - 48) / CGFloat(max(game.hand.count, 4)))) )
+                                    .offset(y: game.selected.contains(card.id) ? -16 : 0)
+                                    .rotationEffect(.degrees(handAngle(for: card) * 2.5))
                                     .zIndex(game.selected.contains(card.id) ? 1 : 0)
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 12)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 10)
+                    .padding(.bottom, 12)
                 }
-                .frame(height: min(112, proxy.size.height * 0.18))
+                .frame(height: min(170, proxy.size.height * 0.24))
 
                 HStack(spacing: 9) {
                     Button {
@@ -471,7 +453,7 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 5)
-                .padding(.bottom, 10)
+                .padding(.bottom, max(14, proxy.safeAreaInsets.bottom))
             }
             .foregroundStyle(AppPalette.ink)
             .task(id: room?.code) { await pollGame() }

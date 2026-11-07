@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AppCanvas: View {
     var body: some View {
-        Color(red: 0.97, green: 0.965, blue: 0.95)
+        Color(red: 0.94, green: 0.945, blue: 0.95)
             .ignoresSafeArea()
     }
 }
@@ -44,14 +44,12 @@ extension View {
 struct PlayingCardView: View {
     let card: PlayingCard
 
-    private var ink: Color {
-        card.suit.isRed ? Color(red: 0.67, green: 0.12, blue: 0.15) : Color(red: 0.10, green: 0.10, blue: 0.10)
-    }
+    private var ink: Color { Color.black }
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let labelSize = max(9, min(16, width * 0.25))
+            let labelSize = max(11, min(18, width * 0.23))
             ZStack {
                 Image("CardFace")
                     .resizable()
@@ -59,18 +57,18 @@ struct PlayingCardView: View {
                     .frame(width: width, height: proxy.size.height)
                     .clipped()
 
-                RoundedRectangle(cornerRadius: max(7, width * 0.09), style: .continuous)
-                    .stroke(Color.black.opacity(0.15), lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: max(3, width * 0.045), style: .continuous)
+                    .stroke(Color.black.opacity(0.10), lineWidth: 0.6)
 
                 VStack {
                     cornerLabel(size: labelSize)
                     Spacer(minLength: 0)
                     cornerLabel(size: labelSize).rotationEffect(.degrees(180))
                 }
-                .padding(.horizontal, width * 0.08)
-                .padding(.vertical, proxy.size.height * 0.04)
+                .padding(.horizontal, width * 0.07)
+                .padding(.vertical, proxy.size.height * 0.035)
             }
-            .clipShape(RoundedRectangle(cornerRadius: max(7, width * 0.09), style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: max(3, width * 0.045), style: .continuous))
             .accessibilityLabel("\(card.label) \(card.suit.glyph)")
         }
         .aspectRatio(0.64, contentMode: .fit)
@@ -93,9 +91,9 @@ struct CardBackView: View {
                 .scaledToFill()
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: max(7, proxy.size.width * 0.09), style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: max(3, proxy.size.width * 0.045), style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: max(7, proxy.size.width * 0.09), style: .continuous)
+                    RoundedRectangle(cornerRadius: max(3, proxy.size.width * 0.045), style: .continuous)
                         .stroke(Color.black.opacity(0.12), lineWidth: 0.8)
                 }
                 .accessibilityLabel("Kortin selkäpuoli")
