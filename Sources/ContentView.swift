@@ -88,10 +88,10 @@ struct ContentView: View {
                     }.padding(.top, 8)
 
                     VStack(spacing: 10) {
-                        BrandCross(size: min(74, proxy.size.width * 0.18), color: Color(red: 0.13, green: 0.13, blue: 0.14))
-                        Text("CHROME HEARTS").font(.system(size: min(29, proxy.size.width * 0.075), weight: .black, design: .serif)).tracking(1.6)
+                        BrandCross(size: min(58, proxy.size.width * 0.15), color: Color(red: 0.13, green: 0.13, blue: 0.14))
+                        Text("CHROME HEARTS").font(.system(size: min(25, proxy.size.width * 0.065), weight: .black, design: .serif)).tracking(1.4)
                         Text("KORTTIPELI").font(.system(size: 10, weight: .bold, design: .rounded)).tracking(5).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity).padding(.top, max(24, proxy.size.height * 0.045)).padding(.bottom, max(24, proxy.size.height * 0.055))
+                    }.frame(maxWidth: .infinity).padding(.top, max(16, proxy.size.height * 0.03)).padding(.bottom, max(18, proxy.size.height * 0.035))
 
                     VStack(spacing: 12) {
                         ForEach(GameKind.allCases) { kind in
@@ -99,13 +99,13 @@ struct ContentView: View {
                                 HStack(spacing: 16) {
                                     Text(kind == .kakkahousu ? "♠" : "♣").font(.system(size: 28, weight: .regular)).foregroundStyle(Color(red: 0.34, green: 0.29, blue: 0.23)).frame(width: 38)
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(kind.rawValue.uppercased()).font(.system(size: 14, weight: .bold, design: .serif)).tracking(1.1)
-                                        Text(kind.subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+                                        Text(kind.rawValue.uppercased()).font(.system(size: 12, weight: .bold, design: .serif)).tracking(1)
+                                        Text(kind.subtitle).font(.system(size: 10)).foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 8)
                                     Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                                 }
-                                .foregroundStyle(.primary).padding(.horizontal, 17).frame(height: 72)
+                                .foregroundStyle(.primary).padding(.horizontal, 15).frame(height: 64)
                                 .premiumGlass(cornerRadius: 18)
                                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.75), lineWidth: 0.8))
                                 .shadow(color: .black.opacity(0.045), radius: 14, y: 7)
@@ -227,19 +227,19 @@ struct ContentView: View {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(spacing: 7) {
                         Button { game.draw(); if game.actionSucceeded { if room == nil { AudioServicesPlaySystemSound(1104) }; Task { await publishGame(advanceTurn: false) } } } label: {
-                            CardBackView().frame(width: min(74, proxy.size.width * 0.19), height: min(112, proxy.size.width * 0.29))
+                            CardBackView().frame(width: min(60, proxy.size.width * 0.16), height: min(92, proxy.size.width * 0.24))
                         }.buttonStyle(.plain).disabled(!game.turn || game.game == .mustaMaija)
                         Text("PAKKA · \(game.deckCount)").font(.system(size: 9, weight: .bold)).tracking(0.8).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                     VStack(spacing: 7) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.42)).frame(width: min(106, proxy.size.width * 0.27), height: min(143, proxy.size.width * 0.37))
+                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.42)).frame(width: min(88, proxy.size.width * 0.23), height: min(120, proxy.size.width * 0.31))
                                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(.black.opacity(0.07), style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
                             if let top = game.tableCards.last {
-                                PlayingCardView(card: top).frame(width: min(78, proxy.size.width * 0.20)).rotationEffect(.degrees(Double(top.rank % 5 - 2))).transition(.move(edge: .top).combined(with: .scale))
+                                PlayingCardView(card: top).frame(width: min(64, proxy.size.width * 0.17)).rotationEffect(.degrees(Double(top.rank % 5 - 2))).transition(.move(edge: .top).combined(with: .scale))
                             } else if game.game == .mustaMaija, let trump = game.maijaTrumpCard {
-                                PlayingCardView(card: trump).frame(width: min(78, proxy.size.width * 0.20)).transition(.move(edge: .top).combined(with: .scale))
+                                PlayingCardView(card: trump).frame(width: min(64, proxy.size.width * 0.17)).transition(.move(edge: .top).combined(with: .scale))
                             } else { BrandCross(size: 35, color: .black.opacity(0.16)) }
                         }
                         Text(game.game == .mustaMaija ? "VALTTI · \(game.maijaTrumpSuit?.glyph ?? "–")" : "PÖYTÄ · \(game.tableCards.count)").font(.system(size: 9, weight: .bold)).tracking(0.8).foregroundStyle(.secondary)
@@ -269,7 +269,7 @@ struct ContentView: View {
                 Spacer(minLength: 4)
                 if !game.selected.isEmpty, let preview = game.hand.first(where: { game.selected.contains($0.id) }) {
                     HStack(spacing: 12) {
-                        PlayingCardView(card: preview).frame(width: 62).shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                        PlayingCardView(card: preview).frame(width: 52).shadow(color: .black.opacity(0.12), radius: 6, y: 3)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("VALITTU KORTTI").font(.system(size: 8, weight: .bold)).tracking(1.2).foregroundStyle(.secondary)
                             Text("\(preview.label) \(preview.suit.glyph)").font(.system(size: 16, weight: .bold, design: .serif))
@@ -283,14 +283,14 @@ struct ContentView: View {
                         ForEach(game.hand) { card in
                             Button { withAnimation(.spring(response: 0.28, dampingFraction: 0.68)) { game.toggle(card) } } label: {
                                 PlayingCardView(card: card)
-                                    .frame(width: min(70, max(42, (proxy.size.width - 42) / CGFloat(max(game.hand.count, 5)))) )
+                                    .frame(width: min(60, max(38, (proxy.size.width - 42) / CGFloat(max(game.hand.count, 6)))) )
                                     .offset(y: game.selected.contains(card.id) ? -16 : 0)
                                     .rotationEffect(.degrees(handAngle(for: card)))
                                     .zIndex(game.selected.contains(card.id) ? 1 : 0)
                             }.buttonStyle(.plain)
                         }
                     }.padding(.horizontal, 23).padding(.top, 17).padding(.bottom, 9)
-                }.frame(height: min(130, proxy.size.height * 0.23))
+                }.frame(height: min(116, proxy.size.height * 0.19))
 
                 HStack(spacing: 9) {
                     Button { game.draw(); if game.actionSucceeded { AudioServicesPlaySystemSound(1104); Task { await publishGame(advanceTurn: false) } } } label: { actionButton("NOSTA", icon: "arrow.down.to.line") }.disabled(!game.turn || game.game == .mustaMaija)
@@ -356,7 +356,7 @@ struct ContentView: View {
 
     private func actionButton(_ title: String, icon: String, emphasized: Bool = false) -> some View {
         HStack(spacing: 6) { Image(systemName: icon); Text(title).tracking(0.8) }
-            .font(.system(size: 9, weight: .bold)).frame(maxWidth: .infinity).frame(height: 42)
+            .font(.system(size: 9, weight: .bold)).frame(maxWidth: .infinity).frame(height: 38)
             .foregroundStyle(emphasized ? .white : .primary)
             .background(emphasized ? Color(red: 0.12, green: 0.12, blue: 0.13) : .white.opacity(0.62), in: Capsule())
             .overlay(Capsule().stroke(.black.opacity(emphasized ? 0 : 0.08), lineWidth: 0.8))
