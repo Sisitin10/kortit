@@ -41,6 +41,8 @@ struct ContentView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppCanvas().ignoresSafeArea())
         .tint(AppPalette.ink)
         .sheet(isPresented: $showSignIn) { signInSheet }
         .sheet(isPresented: $showScanner) {

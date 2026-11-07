@@ -30,6 +30,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
+            TARGETED_DEVICE_FAMILY=1 \
             PRODUCT_BUNDLE_IDENTIFIER=fi.chromehearts.cards \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" build
       - name: Package unsigned IPA
