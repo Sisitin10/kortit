@@ -345,7 +345,7 @@ struct ContentView: View {
                                 Task { await publishGame(advanceTurn: false) }
                             }
                         } label: {
-                            CardBackView().frame(width: min(58, proxy.size.width * 0.15), height: min(90, proxy.size.width * 0.235))
+                            CardBackView().frame(width: min(94, proxy.size.width * 0.25), height: min(146, proxy.size.width * 0.39))
                         }
                         .buttonStyle(.plain)
                         .disabled(!game.turn || game.game == .mustaMaija)
@@ -410,13 +410,15 @@ struct ContentView: View {
                 Spacer(minLength: 6)
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: -min(36, proxy.size.width * 0.09)) {
+                    let overlap = min(32, proxy.size.width * 0.082)
+                    let cardWidth = min(104, max(80, (proxy.size.width - 40 + overlap * CGFloat(max(game.hand.count - 1, 0))) / CGFloat(max(game.hand.count, 1))))
+                    HStack(spacing: -overlap) {
                         ForEach(game.hand) { card in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) { game.toggle(card) }
                             } label: {
                                 PlayingCardView(card: card)
-                                    .frame(width: min(86, max(62, (proxy.size.width - 48) / CGFloat(max(game.hand.count, 4)))) )
+                                    .frame(width: cardWidth)
                                     .offset(y: game.selected.contains(card.id) ? -16 : 0)
                                     .rotationEffect(.degrees(handAngle(for: card) * 2.5))
                                     .zIndex(game.selected.contains(card.id) ? 1 : 0)
@@ -424,11 +426,13 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 32)
+                    .frame(minWidth: proxy.size.width - 40, alignment: .center)
+                    .padding(.horizontal, 20)
                     .padding(.top, 10)
                     .padding(.bottom, 12)
                 }
                 .frame(height: min(170, proxy.size.height * 0.24))
+                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: game.selected)
 
                 HStack(spacing: 9) {
                     Button {

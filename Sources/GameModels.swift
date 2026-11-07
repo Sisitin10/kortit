@@ -340,7 +340,6 @@ final class CardGame: ObservableObject {
                 let clearsPile = (chosen.count == 4 && rank != 2) || (rank == 10 && top.map { (3...9).contains($0) } == true) || (rank == 1 && top.map { (11...13).contains($0) } == true)
                 if clearsPile { tableCards.removeAll(); keepTurnAfterPlay = true }
                 else { tableCards.append(contentsOf: chosen) }
-                replenishHand(to: 5)
             } else {
                 if maijaPhase == .attack {
                     maijaAttackerID = playerID
@@ -348,7 +347,6 @@ final class CardGame: ObservableObject {
                     maijaPhase = .defense
                     isMaijaDefense = true
                     nextActivePlayerID = maijaDefenderID
-                    replenishHand(to: 5)
                 } else {
                     var remainingAttacks = tableCards
                     for response in chosen {
@@ -363,7 +361,6 @@ final class CardGame: ObservableObject {
                     maijaAttackerID = allBeaten ? nextMaijaPlayer(after: maijaAttackerID) : nextMaijaPlayer(after: playerID)
                     maijaDefenderID = nextMaijaPlayer(after: maijaAttackerID)
                     nextActivePlayerID = maijaAttackerID
-                    replenishHand(to: 5)
                 }
             }
             selected.removeAll()
@@ -399,7 +396,6 @@ final class CardGame: ObservableObject {
             maijaPhase = .attack
             isMaijaDefense = false
             let defender = playerID
-            replenishHand(to: 5)
             maijaAttackerID = nextMaijaPlayer(after: defender)
             maijaDefenderID = nextMaijaPlayer(after: maijaAttackerID)
             nextActivePlayerID = maijaAttackerID
@@ -426,17 +422,6 @@ final class CardGame: ObservableObject {
         if card.rank == 2 { return 15 }
         if card.rank == 1 { return 14 }
         return card.rank
-    }
-
-    private func replenishHand(to count: Int) {
-        let available = drawPile.count + (maijaTrumpCard == nil ? 0 : 1)
-        let amount = min(max(0, count - hand.count), available)
-        guard amount > 0 else { return }
-        var drawn = Array(drawPile.prefix(min(amount, drawPile.count)))
-        if drawn.count < amount, let trumpCard = maijaTrumpCard { drawn.append(trumpCard); maijaTrumpCard = nil }
-        hand.append(contentsOf: drawn)
-        drawPile.removeFirst(min(amount, drawPile.count))
-        deckCount = drawPile.count + (maijaTrumpCard == nil ? 0 : 1)
     }
 
     private var currentHandsCount: [String: Int] { remoteHandCounts }
