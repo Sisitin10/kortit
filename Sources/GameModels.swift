@@ -160,7 +160,7 @@ final class CardGame: ObservableObject {
     private var maijaAttackerID: String?
     private var maijaDefenderID: String?
     private var maijaTrump: Suit?
-    private var maijaTrumpCard: PlayingCard?
+    @Published private(set) var maijaTrumpCard: PlayingCard?
     private var maijaDiscardCount = 0
     private var remoteHandCounts: [String: Int] = [:]
 
