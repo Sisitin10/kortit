@@ -4,9 +4,17 @@ Portrait-iOS-korttipelisovellus Kakkahousulle ja Mustalle Maijalle. Sovelluksen 
 
 ## Build ja GitHub Releases
 
-GitHub Actions rakentaa sovelluksen GitHubin macOS 26 -runnerilla, joten paikallista Macia ei tarvita. Jokainen push rakentaa IPA:n ja tallentaa sen Actions-artifactiksi. Repon oletushaaran onnistunut build julkaisee lisäksi uuden GitHub Releasen, johon allekirjoittamaton IPA liitetään.
+GitHub Actions rakentaa sovelluksen GitHubin Xcode 27 -runnerilla, joten paikallista Macia ei tarvita. Jokainen push rakentaa IPA:n ja tallentaa sen Actions-artifactiksi. Repon oletushaaran onnistunut build julkaisee uuden GitHub Releasen, johon liitetään IPA ja Feather-lähde.
 
 IPA:ta ei voi asentaa suoraan iPhoneen ennen Apple-allekirjoitusta ja provisioning-profiilia.
+
+## Feather
+
+Lisää Featheriin tämä repo kerran; sen jälkeen Feather-lähde näyttää uusimman oletushaarasta julkaistun buildin:
+
+`https://github.com/Sisitin10/kortit/releases/latest/download/Korttipelit-feather-source.json`
+
+Feather-lähde päivittyy automaattisesti jokaisen onnistuneen julkaisun yhteydessä. IPA on allekirjoittamaton, joten Feather tarvitsee oman allekirjoitusvarmenteesi ennen asennusta.
 
 ## Firebase
 
