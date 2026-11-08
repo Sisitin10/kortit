@@ -26,5 +26,7 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:567567733173:ios:2cfda8aa3bdf0487a909fc</string>
+	<key>DATABASE_URL</key>
+	<string>https://pelikortit-54a11-default-rtdb.europe-west1.firebasedatabase.app</string>
 </dict>
 </plist>
