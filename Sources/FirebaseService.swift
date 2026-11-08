@@ -13,6 +13,12 @@ enum OnlineError: LocalizedError {
     }
 }
 
+struct FirebaseAuthSession {
+    let idToken: String
+    let refreshToken: String
+    let email: String?
+}
+
 final class FirebaseService {
     static let shared = FirebaseService()
     private init() {}
@@ -35,13 +41,40 @@ final class FirebaseService {
         return value
     }
 
-    func authenticate(email: String, password: String, create: Bool) async throws -> String {
+    func authenticate(email: String, password: String, create: Bool) async throws -> FirebaseAuthSession {
         guard let apiKey else { throw OnlineError.missingConfiguration }
         let method = create ? "signUp" : "signInWithPassword"
         let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:\(method)?key=\(apiKey)")!
         let data = try await post(url, body: ["email": email, "password": password, "returnSecureToken": true])
-        guard let token = data["idToken"] as? String else { throw OnlineError.invalidResponse }
-        return token
+        guard let token = data["idToken"] as? String,
+              let refreshToken = data["refreshToken"] as? String else { throw OnlineError.invalidResponse }
+        return FirebaseAuthSession(idToken: token, refreshToken: refreshToken, email: data["email"] as? String)
+    }
+
+    func refreshSession(refreshToken: String) async throws -> FirebaseAuthSession {
+        guard let apiKey,
+              let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
+            throw OnlineError.missingConfiguration
+        }
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "grant_type", value: "refresh_token"),
+            URLQueryItem(name: "refresh_token", value: refreshToken)
+        ]
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let status = response as? HTTPURLResponse else { throw OnlineError.invalidResponse }
+        guard (200..<300).contains(status.statusCode) else {
+            let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? [String: Any]
+            throw OnlineError.server(detail?["message"] as? String ?? "Kirjautumisistunto on vanhentunut. Kirjaudu uudelleen.")
+        }
+        guard let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = result["id_token"] as? String,
+              let newRefreshToken = result["refresh_token"] as? String else { throw OnlineError.invalidResponse }
+        return FirebaseAuthSession(idToken: token, refreshToken: newRefreshToken, email: result["user_id"] as? String)
     }
 
     func createRoom(game: GameKind, player: PlayerInfo, token: String, rules: KakkahousuRules = KakkahousuRules()) async throws -> OnlineRoom {

@@ -43,6 +43,14 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppCanvas().ignoresSafeArea())
+        .overlay {
+            if screen != .table, showNewGame {
+                gameModeOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(2)
+            }
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: showNewGame)
         .tint(AppPalette.ink)
         .sheet(isPresented: $showSignIn) { signInSheet }
         .sheet(isPresented: $showScanner) {
@@ -63,6 +71,7 @@ struct ContentView: View {
             screen = .room
             Task { await joinRoom() }
         }
+        .task { await session.restoreSession() }
         .preferredColorScheme(.light)
     }
 
@@ -167,20 +176,74 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
             }
         }
-        .confirmationDialog(selectedGame.rawValue, isPresented: $showNewGame, titleVisibility: .visible) {
-            if selectedGame == .kakkahousu {
-                Button("Harjoittele yksin") {
-                    game.start(selectedGame, rules: KakkahousuRules(faceCardsMinimum: faceCardsMinimum))
+    }
+
+    private var gameModeOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.24)
+                .ignoresSafeArea()
+                .onTapGesture { showNewGame = false }
+
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(selectedGame.rawValue)
+                        .font(.system(size: 21, weight: .semibold))
+                    Text("Valitse, miten haluat pelata.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppPalette.muted)
+                }
+                .padding(.bottom, 4)
+
+                if selectedGame == .kakkahousu {
+                    modeChoice("Harjoittele yksin", detail: "Pelaa heti ilman huonetta", icon: "person") {
+                        showNewGame = false
+                        game.start(selectedGame, rules: KakkahousuRules(faceCardsMinimum: faceCardsMinimum))
+                        room = nil
+                        screen = .table
+                    }
+                }
+
+                modeChoice("Luo online-huone", detail: "Kutsu ystävät koodilla tai QR:llä", icon: "person.2") {
+                    showNewGame = false
+                    Task { await createRoom() }
+                }
+                modeChoice("Liity huoneeseen", detail: "Käytä huonekoodia tai QR-kutsua", icon: "qrcode") {
+                    showNewGame = false
                     room = nil
-                    screen = .table
+                    screen = .room
                 }
             }
-            Button("Luo online-huone") { Task { await createRoom() } }
-            Button("Liity koodilla tai QR-koodilla") { room = nil; screen = .room }
-            Button("Peruuta", role: .cancel) { }
-        } message: {
-            Text("Valitse, miten haluat pelata.")
+            .padding(20)
+            .frame(maxWidth: 360)
+            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.black.opacity(0.08), lineWidth: 1))
+            .padding(.horizontal, 28)
+            .shadow(color: .black.opacity(0.14), radius: 28, y: 12)
+            .accessibilityAddTraits(.isModal)
         }
+    }
+
+    private func modeChoice(_ title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 13) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(AppPalette.accent)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(AppPalette.ink)
+                    Text(detail).font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(AppPalette.muted)
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 62)
+            .background(AppPalette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: showNewGame)
     }
 
     private var joinRoomView: some View {
