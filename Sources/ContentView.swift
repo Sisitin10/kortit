@@ -315,6 +315,8 @@ struct ContentView: View {
 
     private var tableView: some View {
         GeometryReader { proxy in
+            let tableCardWidth = min(120, proxy.size.width * 0.31)
+            let tableCardHeight = tableCardWidth / 0.64
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     Button { screen = room == nil ? .home : .room } label: {
@@ -353,7 +355,7 @@ struct ContentView: View {
                                 Task { await publishGame(advanceTurn: false) }
                             }
                         } label: {
-                            CardBackView().frame(width: min(76, proxy.size.width * 0.20), height: min(119, proxy.size.width * 0.31))
+                            CardBackView().frame(width: tableCardWidth, height: tableCardHeight)
                         }
                         .buttonStyle(.plain)
                         .disabled(!game.turn)
@@ -365,16 +367,16 @@ struct ContentView: View {
                         ForEach(game.tableCards.suffix(6)) { card in
                             let seed = card.id.utf8.reduce(0) { $0 + Int($1) }
                             PlayingCardView(card: card)
-                                .frame(width: min(108, proxy.size.width * 0.29))
+                                .frame(width: tableCardWidth)
                                 .rotationEffect(.degrees(Double(seed % 7 - 3)))
                                 .offset(x: CGFloat(seed % 5 - 2) * 4, y: CGFloat(seed % 4) * 4)
                                 .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .scale).combined(with: .opacity), removal: .opacity))
                         }
                         if game.tableCards.isEmpty, let trump = game.maijaTrumpCard {
-                            PlayingCardView(card: trump).frame(width: min(108, proxy.size.width * 0.29))
+                            PlayingCardView(card: trump).frame(width: tableCardWidth)
                         }
                     }
-                    .frame(width: min(132, proxy.size.width * 0.36), height: min(190, proxy.size.width * 0.52))
+                    .frame(width: tableCardWidth + 32, height: tableCardHeight + 22)
                     .contentShape(Rectangle())
                     .onTapGesture { playOrPickUpTable() }
                     .dropDestination(for: String.self) { cardIDs, _ in playDroppedCards(cardIDs) }
