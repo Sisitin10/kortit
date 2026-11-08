@@ -90,7 +90,7 @@ struct ContentView: View {
     private var home: some View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 22) {
                     HStack(spacing: 11) {
                         BrandMark(size: 28, color: AppPalette.ink)
                         VStack(alignment: .leading, spacing: 2) {
@@ -107,30 +107,38 @@ struct ContentView: View {
                     }
                     .padding(.top, 8)
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: 14) {
                         ForEach(GameKind.allCases) { kind in
                             Button {
                                 selectedGame = kind
                                 showNewGame = true
                             } label: {
-                                HStack(spacing: 14) {
-                                    Text(kind == .kakkahousu ? "♠" : "♣")
-                                        .font(.system(size: 25, weight: .regular))
-                                        .foregroundStyle(AppPalette.accent)
-                                        .frame(width: 30)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(kind.rawValue).font(.system(size: 16, weight: .semibold))
-                                        Text(kind.subtitle).font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                                VStack(alignment: .leading, spacing: 16) {
+                                    HStack {
+                                        Text(kind == .kakkahousu ? "KLASSIKKO 01" : "KLASSIKKO 02")
+                                            .font(.system(size: 10, weight: .semibold)).tracking(1.2).foregroundStyle(AppPalette.muted)
+                                        Spacer()
+                                        Text(kind == .kakkahousu ? "♠" : "♣")
+                                            .font(.system(size: 24, weight: .regular)).foregroundStyle(AppPalette.accent)
                                     }
-                                    Spacer(minLength: 8)
-                                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(AppPalette.muted)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(kind.rawValue).font(.system(size: 22, weight: .semibold))
+                                        Text(kind.subtitle).font(.system(size: 14)).foregroundStyle(AppPalette.muted)
+                                    }
+                                    HStack(spacing: 7) {
+                                        Text("PELAA").font(.system(size: 10, weight: .semibold)).tracking(1)
+                                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold))
+                                    }
+                                    .foregroundStyle(AppPalette.accent)
                                 }
                                 .foregroundStyle(AppPalette.ink)
-                                .padding(.horizontal, 16)
-                                .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+                                .padding(18)
+                                .frame(maxWidth: .infinity, minHeight: 142, alignment: .leading)
                                 .cleanSurface(cornerRadius: 16)
                             }
                             .buttonStyle(.plain)
+                            .scaleEffect(showNewGame && selectedGame == kind ? 0.985 : 1)
+                            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: showNewGame)
                         }
                     }
 
@@ -345,34 +353,32 @@ struct ContentView: View {
                                 Task { await publishGame(advanceTurn: false) }
                             }
                         } label: {
-                            CardBackView().frame(width: min(94, proxy.size.width * 0.25), height: min(146, proxy.size.width * 0.39))
+                            CardBackView().frame(width: min(76, proxy.size.width * 0.20), height: min(119, proxy.size.width * 0.31))
                         }
                         .buttonStyle(.plain)
-                        .disabled(!game.turn || game.game == .mustaMaija)
+                        .disabled(!game.turn)
                     }
 
                     Spacer(minLength: 0)
 
-                    VStack(spacing: 6) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.white.opacity(0.7))
-                                .frame(width: min(86, proxy.size.width * 0.23), height: min(134, proxy.size.width * 0.35))
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.black.opacity(0.14), lineWidth: 1))
-                            if let top = game.tableCards.last {
-                                PlayingCardView(card: top)
-                                    .frame(width: min(62, proxy.size.width * 0.165))
-                                    .rotationEffect(.degrees(Double(top.rank % 3 - 1)))
-                                    .transition(.move(edge: .top).combined(with: .opacity))
-                            } else if game.game == .mustaMaija, let trump = game.maijaTrumpCard {
-                                PlayingCardView(card: trump)
-                                    .frame(width: min(62, proxy.size.width * 0.165))
-                                    .transition(.move(edge: .top).combined(with: .opacity))
-                            } else {
-                                Text("Pöytä tyhjä").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
-                            }
+                    ZStack {
+                        ForEach(game.tableCards.suffix(6)) { card in
+                            let seed = card.id.utf8.reduce(0) { $0 + Int($1) }
+                            PlayingCardView(card: card)
+                                .frame(width: min(108, proxy.size.width * 0.29))
+                                .rotationEffect(.degrees(Double(seed % 7 - 3)))
+                                .offset(x: CGFloat(seed % 5 - 2) * 4, y: CGFloat(seed % 4) * 4)
+                                .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .scale).combined(with: .opacity), removal: .opacity))
+                        }
+                        if game.tableCards.isEmpty, let trump = game.maijaTrumpCard {
+                            PlayingCardView(card: trump).frame(width: min(108, proxy.size.width * 0.29))
                         }
                     }
+                    .frame(width: min(132, proxy.size.width * 0.36), height: min(190, proxy.size.width * 0.52))
+                    .contentShape(Rectangle())
+                    .onTapGesture { playOrPickUpTable() }
+                    .dropDestination(for: String.self) { cardIDs, _ in playDroppedCards(cardIDs) }
+                    .animation(.spring(response: 0.38, dampingFraction: 0.78), value: game.tableCards)
 
                     Spacer(minLength: 0)
 
@@ -387,25 +393,6 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
-
-                if !game.tableCards.isEmpty {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) { game.pickupTable() }
-                        if game.actionSucceeded {
-                            if room == nil { AudioServicesPlaySystemSound(1104) }
-                            Task { await publishGame(advanceTurn: true) }
-                        }
-                    } label: {
-                        Label(game.game == .mustaMaija ? "Ota kortit" : "Nosta pöytä", systemImage: "arrow.down.to.line")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppPalette.ink)
-                            .padding(.horizontal, 14)
-                            .frame(height: 38)
-                            .cleanSurface(cornerRadius: 12)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!game.turn)
-                }
 
                 Spacer(minLength: 6)
 
@@ -424,6 +411,8 @@ struct ContentView: View {
                                     .zIndex(game.selected.contains(card.id) ? 1 : 0)
                             }
                             .buttonStyle(.plain)
+                            .draggable(card.id)
+                            .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
                         }
                     }
                     .frame(minWidth: proxy.size.width - 40, alignment: .center)
@@ -431,35 +420,9 @@ struct ContentView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 12)
                 }
-                .frame(height: min(170, proxy.size.height * 0.24))
+                .frame(height: min(205, proxy.size.height * 0.30))
                 .animation(.spring(response: 0.32, dampingFraction: 0.82), value: game.selected)
-
-                HStack(spacing: 9) {
-                    Button {
-                        game.draw()
-                        if game.actionSucceeded {
-                            if room == nil { AudioServicesPlaySystemSound(1104) }
-                            Task { await publishGame(advanceTurn: false) }
-                        }
-                    } label: { actionButton("Nosta", icon: "arrow.down.to.line") }
-                        .disabled(!game.turn || game.game == .mustaMaija)
-                    Button {
-                        game.playSelected()
-                        if game.actionSucceeded {
-                            if room == nil { AudioServicesPlaySystemSound(1104) }
-                            Task { await publishGame(advanceTurn: true) }
-                        }
-                    } label: {
-                        actionButton(game.game == .mustaMaija ? (game.isMaijaDefense ? "Kaada" : "Hyökkää") : "Pelaa", icon: "arrow.up.right", emphasized: true)
-                    }
-                    .disabled(game.selected.isEmpty || !game.turn)
-                    Button { game.selected.removeAll(); game.notice = "Valinta peruttu." } label: {
-                        actionButton("Tyhjennä", icon: "xmark")
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 5)
-                .padding(.bottom, max(14, proxy.safeAreaInsets.bottom))
+                .padding(.bottom, max(12, proxy.safeAreaInsets.bottom))
             }
             .foregroundStyle(AppPalette.ink)
             .task(id: room?.code) { await pollGame() }
@@ -568,36 +531,35 @@ struct ContentView: View {
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func actionButton(_ title: String, icon: String, emphasized: Bool = false) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-            Text(title).lineLimit(1).minimumScaleFactor(0.8)
-        }
-        .font(.system(size: 12, weight: .semibold))
-        .frame(maxWidth: .infinity)
-        .frame(height: 46)
-        .foregroundStyle(emphasized ? .white : AppPalette.ink)
-        .background(emphasized ? AppPalette.ink : .white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.black.opacity(emphasized ? 0 : 0.08), lineWidth: 1))
-    }
-
-    private func playerBadge(_ name: String, count: Int, isLocal: Bool = false) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: isLocal ? "person.crop.circle.fill" : "person.fill")
-                .font(.system(size: 12)).foregroundStyle(isLocal ? AppPalette.accent : AppPalette.muted)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.system(size: 10, weight: .semibold)).lineLimit(1)
-                Text("\(count) korttia").font(.system(size: 9)).foregroundStyle(AppPalette.muted)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 10))
-    }
-
     private func handAngle(for card: PlayingCard) -> Double {
         guard game.hand.count > 1, let index = game.hand.firstIndex(of: card) else { return 0 }
         return Double(index - game.hand.count / 2) * 1.7
+    }
+
+    private func playOrPickUpTable() {
+        guard game.turn else { return }
+        guard !game.selected.isEmpty || !game.tableCards.isEmpty else { return }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+            if game.selected.isEmpty {
+                if !game.tableCards.isEmpty { game.pickupTable() }
+            } else {
+                game.playSelected()
+            }
+        }
+        guard game.actionSucceeded else { return }
+        if room == nil { AudioServicesPlaySystemSound(1104) }
+        Task { await publishGame(advanceTurn: true) }
+    }
+
+    private func playDroppedCards(_ cardIDs: [String]) -> Bool {
+        guard game.turn else { return false }
+        let handIDs = Set(game.hand.map(\.id))
+        game.selected.formUnion(cardIDs.filter { handIDs.contains($0) })
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { game.playSelected() }
+        guard game.actionSucceeded else { return false }
+        if room == nil { AudioServicesPlaySystemSound(1104) }
+        Task { await publishGame(advanceTurn: true) }
+        return true
     }
 
     private func createRoom() async {

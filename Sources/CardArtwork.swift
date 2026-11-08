@@ -60,10 +60,16 @@ struct PlayingCardView: View {
                 RoundedRectangle(cornerRadius: max(3, width * 0.045), style: .continuous)
                     .stroke(Color.black.opacity(0.10), lineWidth: 0.6)
 
-                VStack {
-                    cornerLabel(size: labelSize)
+                VStack(spacing: 0) {
+                    HStack(alignment: .top) {
+                        cornerLabel(size: labelSize)
+                        Spacer(minLength: 0)
+                    }
                     Spacer(minLength: 0)
-                    cornerLabel(size: labelSize).rotationEffect(.degrees(180))
+                    HStack(alignment: .bottom) {
+                        Spacer(minLength: 0)
+                        cornerLabel(size: labelSize).rotationEffect(.degrees(180))
+                    }
                 }
                 .padding(.horizontal, width * 0.07)
                 .padding(.vertical, proxy.size.height * 0.035)
