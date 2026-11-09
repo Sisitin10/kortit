@@ -2,7 +2,6 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -29,7 +28,7 @@ val hasReleaseSigning = !releaseKeystorePath.isNullOrBlank() &&
 
 android {
     namespace = "fi.chromehearts.cards.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "fi.chromehearts.cards.android"
@@ -70,11 +69,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        }
-    }
 }
 
 dependencies {
