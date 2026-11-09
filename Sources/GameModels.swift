@@ -91,13 +91,14 @@ struct SharedGameState: Codable {
     var maijaTrump: Suit? = nil
     var maijaTrumpCard: PlayingCard? = nil
     var maijaDiscardCount: Int = 0
+    var kakkahousuPendingDraw: Bool = false
 
     private enum CodingKeys: String, CodingKey {
         case kind, playerOrder, activePlayerID, hands, drawPile, tableCards, isOver, winnerID, kakkahousuRules
-        case maijaPhase, maijaAttackerID, maijaDefenderID, maijaTrump, maijaTrumpCard, maijaDiscardCount
+        case maijaPhase, maijaAttackerID, maijaDefenderID, maijaTrump, maijaTrumpCard, maijaDiscardCount, kakkahousuPendingDraw
     }
 
-    init(kind: GameKind, playerOrder: [String], activePlayerID: String, hands: [String: [PlayingCard]], drawPile: [PlayingCard], tableCards: [PlayingCard], isOver: Bool = false, winnerID: String? = nil, kakkahousuRules: KakkahousuRules = KakkahousuRules(), maijaPhase: MaijaPhase = .attack, maijaAttackerID: String? = nil, maijaDefenderID: String? = nil, maijaTrump: Suit? = nil, maijaTrumpCard: PlayingCard? = nil, maijaDiscardCount: Int = 0) {
+    init(kind: GameKind, playerOrder: [String], activePlayerID: String, hands: [String: [PlayingCard]], drawPile: [PlayingCard], tableCards: [PlayingCard], isOver: Bool = false, winnerID: String? = nil, kakkahousuRules: KakkahousuRules = KakkahousuRules(), maijaPhase: MaijaPhase = .attack, maijaAttackerID: String? = nil, maijaDefenderID: String? = nil, maijaTrump: Suit? = nil, maijaTrumpCard: PlayingCard? = nil, maijaDiscardCount: Int = 0, kakkahousuPendingDraw: Bool = false) {
         self.kind = kind
         self.playerOrder = playerOrder
         self.activePlayerID = activePlayerID
@@ -113,6 +114,7 @@ struct SharedGameState: Codable {
         self.maijaTrump = maijaTrump
         self.maijaTrumpCard = maijaTrumpCard
         self.maijaDiscardCount = maijaDiscardCount
+        self.kakkahousuPendingDraw = kakkahousuPendingDraw
     }
 
     init(from decoder: Decoder) throws {
@@ -132,6 +134,7 @@ struct SharedGameState: Codable {
         maijaTrump = try values.decodeIfPresent(Suit.self, forKey: .maijaTrump)
         maijaTrumpCard = try values.decodeIfPresent(PlayingCard.self, forKey: .maijaTrumpCard)
         maijaDiscardCount = try values.decodeIfPresent(Int.self, forKey: .maijaDiscardCount) ?? 0
+        kakkahousuPendingDraw = try values.decodeIfPresent(Bool.self, forKey: .kakkahousuPendingDraw) ?? false
     }
 }
 
@@ -280,7 +283,7 @@ final class CardGame: ObservableObject {
         sharedHands = state.hands
         selected.removeAll()
         turn = state.activePlayerID == id
-        mustRefillAfterPlay = state.kind == .kakkahousu && turn && hand.count < 5 && !state.drawPile.isEmpty
+        mustRefillAfterPlay = state.kind == .kakkahousu && turn && state.kakkahousuPendingDraw
         notice = state.isOver ? (state.winnerID == id ? "Sinä voitit kierroksen!" : "Kierros päättyi.") : (turn ? "Sinun vuorosi." : "Odotetaan vastustajan vuoroa.")
         if didDrawCards { drawSoundSequence += 1 }
         if didChangeTable { AudioServicesPlaySystemSound(1104) }
@@ -301,6 +304,7 @@ final class CardGame: ObservableObject {
         updated.maijaTrump = maijaTrump
         updated.maijaTrumpCard = maijaTrumpCard
         updated.maijaDiscardCount = maijaDiscardCount
+        updated.kakkahousuPendingDraw = updated.kind == .kakkahousu && mustRefillAfterPlay
         if updated.drawPile.isEmpty && updated.maijaTrumpCard == nil {
             if updated.kind == .kakkahousu, hand.isEmpty {
                 updated.isOver = true
@@ -364,7 +368,7 @@ final class CardGame: ObservableObject {
                 let clearsPile = (chosen.count == 4 && rank != 2) || (rank == 10 && top.map { (3...9).contains($0) } == true) || (rank == 1 && top.map { (11...13).contains($0) } == true)
                 if clearsPile { tableCards.removeAll(); keepTurnAfterPlay = true }
                 else { tableCards.append(contentsOf: chosen) }
-                mustRefillAfterPlay = deckCount > 0
+                mustRefillAfterPlay = deckCount > 0 && hand.count < 5
             } else {
                 if maijaPhase == .attack {
                     maijaAttackerID = playerID
