@@ -13,7 +13,7 @@ fun plistValue(key: String): String {
     for (index in 0 until keys.length) {
         if (keys.item(index).textContent == key) {
             var valueNode = keys.item(index).nextSibling
-            while (valueNode != null && valueNode.nodeType != 1) valueNode = valueNode.nextSibling
+            while (valueNode != null && valueNode.nodeType != org.w3c.dom.Node.ELEMENT_NODE) valueNode = valueNode.nextSibling
             return valueNode?.textContent.orEmpty()
         }
     }
