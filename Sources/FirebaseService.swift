@@ -77,9 +77,9 @@ final class FirebaseService {
         return FirebaseAuthSession(idToken: token, refreshToken: newRefreshToken, email: result["user_id"] as? String)
     }
 
-    func createRoom(game: GameKind, player: PlayerInfo, token: String, rules: KakkahousuRules = KakkahousuRules()) async throws -> OnlineRoom {
+    func createRoom(game: GameKind, player: PlayerInfo, token: String, rules: KakkahousuRules = KakkahousuRules(), fiveSecondsSpecialCardsEnabled: Bool = false) async throws -> OnlineRoom {
         let code = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(6)).uppercased()
-        let room = OnlineRoom(code: code, game: game, hostID: player.id, players: [player.id: player], updatedAt: Date().timeIntervalSince1970, gameState: nil, kakkahousuFaceCardsMinimum: rules.faceCardsMinimum)
+        let room = OnlineRoom(code: code, game: game, hostID: player.id, players: [player.id: player], updatedAt: Date().timeIntervalSince1970, gameState: nil, kakkahousuFaceCardsMinimum: rules.faceCardsMinimum, fiveSecondsState: nil, fiveSecondsSpecialCardsEnabled: fiveSecondsSpecialCardsEnabled)
         try await save(room, token: token)
         return room
     }

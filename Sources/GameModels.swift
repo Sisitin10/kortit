@@ -27,21 +27,30 @@ struct PlayingCard: Identifiable, Codable, Hashable {
 enum GameKind: String, CaseIterable, Codable, Identifiable {
     case kakkahousu = "Kakkahousu"
     case mustaMaija = "Musta Maija"
+    case fiveSeconds = "5 Sekuntia"
     var id: String { rawValue }
-    var subtitle: String { self == .kakkahousu ? "Pelaa, nosta ja vältä viimeistä kättä." : "Vältä Mustaa Maijaa viimeiseen asti." }
+    var subtitle: String {
+        switch self {
+        case .kakkahousu: "Pelaa, nosta ja vältä viimeistä kättä."
+        case .mustaMaija: "Vältä Mustaa Maijaa viimeiseen asti."
+        case .fiveSeconds: "Keksi kolme vastausta ennen kuin aika loppuu."
+        }
+    }
 }
 
 struct PlayerInfo: Codable, Identifiable, Equatable {
     var id: String
     var name: String
     var handCount: Int = 0
+    var pieceColor: String? = nil
 
-    private enum CodingKeys: String, CodingKey { case id, name, handCount }
+    private enum CodingKeys: String, CodingKey { case id, name, handCount, pieceColor }
 
-    init(id: String, name: String, handCount: Int = 0) {
+    init(id: String, name: String, handCount: Int = 0, pieceColor: String? = nil) {
         self.id = id
         self.name = name
         self.handCount = handCount
+        self.pieceColor = pieceColor
     }
 
     init(from decoder: Decoder) throws {
@@ -49,6 +58,7 @@ struct PlayerInfo: Codable, Identifiable, Equatable {
         id = try values.decode(String.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
         handCount = try values.decodeIfPresent(Int.self, forKey: .handCount) ?? 0
+        pieceColor = try values.decodeIfPresent(String.self, forKey: .pieceColor)
     }
 }
 
@@ -60,6 +70,8 @@ struct OnlineRoom: Codable {
     var updatedAt: TimeInterval
     var gameState: SharedGameState? = nil
     var kakkahousuFaceCardsMinimum: Int? = nil
+    var fiveSecondsState: FiveSecondsState? = nil
+    var fiveSecondsSpecialCardsEnabled: Bool? = nil
 }
 
 struct KakkahousuRules: Codable, Equatable {

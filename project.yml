@@ -1,4 +1,4 @@
-name: ChromeHearts
+name: Lautapelit
 options:
   bundleIdPrefix: fi.chromehearts
   deploymentTarget:
@@ -10,7 +10,7 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "27.0"
     GENERATE_INFOPLIST_FILE: YES
 targets:
-  ChromeHearts:
+  Lautapelit:
     type: application
     platform: iOS
     sources:
@@ -18,13 +18,16 @@ targets:
       - path: Assets.xcassets
     resources:
       - path: Resources/card-swap.mp3
+      - path: Resources/five_seconds_questions.txt
     info:
-      path: Generated/ChromeHearts-Info.plist
+      path: Generated/Lautapelit-Info.plist
       properties:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: Skannaa QR-koodi liittyäksesi pelikaverin huoneeseen.
+        NSMicrophoneUsageDescription: Käytä mikrofonia 5 Sekuntia -pelin vastausten tunnistamiseen.
+        NSSpeechRecognitionUsageDescription: Tunnista suomenkielinen puhe 5 Sekuntia -pelin aikarajalla.
         CFBundleURLTypes:
           - CFBundleURLName: fi.chromehearts.cards.room
             CFBundleURLSchemes:
@@ -33,7 +36,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: fi.chromehearts.cards
         TARGETED_DEVICE_FAMILY: "1"
-        INFOPLIST_KEY_CFBundleDisplayName: Korttipelit
+        INFOPLIST_KEY_CFBundleDisplayName: Lautapelit
         INFOPLIST_KEY_FIREBASE_DATABASE_URL: $(FIREBASE_DATABASE_URL)
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO

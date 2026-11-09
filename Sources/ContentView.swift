@@ -4,7 +4,7 @@ import AVFoundation
 import UIKit
 import PhotosUI
 
-private enum Screen: Equatable { case home, host, createRoom, room, table }
+private enum Screen: Equatable { case home, host, createRoom, room, table, fiveSeconds }
 
 private enum AppPalette {
     static let ink = Color.primary
@@ -24,6 +24,7 @@ struct ContentView: View {
     @State private var playerID = UUID().uuidString
     @State private var roomCode = ""
     @State private var faceCardsMinimum = 7
+    @State private var fiveSecondsSpecialCardsEnabled = false
     @State private var showScanner = false
     @State private var showSignIn = false
     @State private var errorMessage: String?
@@ -40,9 +41,32 @@ struct ContentView: View {
     @State private var selectedProfilePhoto: PhotosPickerItem?
     @State private var cardSwapPlayer: AVAudioPlayer?
 
+    private var selectedFiveSecondsColor: FiveSecondsColor? {
+        guard let value = room?.players[playerID]?.pieceColor else { return nil }
+        return FiveSecondsColor(rawValue: value)
+    }
+    private var fiveSecondsColorsAreReady: Bool {
+        guard let players = room?.players.values, players.count >= 2 else { return false }
+        let colors = players.compactMap(\.pieceColor)
+        return colors.count == players.count && Set(colors).count == players.count
+    }
+
     var body: some View {
         Group {
-            if screen == .table {
+            if screen == .fiveSeconds, let room, let state = room.fiveSecondsState {
+                FiveSecondsTableView(
+                    state: state,
+                    playerID: playerID,
+                    players: room.players,
+                    onDraw: { Task { await drawFiveSecondsQuestion() } },
+                    onStartAnswering: { Task { await startFiveSecondsAnswer() } },
+                    onFinishAnswer: { transcript in Task { await finishFiveSecondsAnswer(transcript) } },
+                    onJudge: { correct in Task { await judgeFiveSecondsAnswer(correct) } },
+                    onSpecial: { Task { await resolveFiveSecondsSpecial() } },
+                    onLeave: { returnToLobby() }
+                )
+                .task(id: room.code) { await pollFiveSeconds() }
+            } else if screen == .table {
                 tableView
             } else {
                 TabView(selection: $activeTab) {
@@ -60,7 +84,7 @@ struct ContentView: View {
         .tint(AppPalette.ink)
         .sheet(isPresented: $showSignIn) { signInSheet }
         .sheet(isPresented: $showScanner) { scannerSheet }
-        .alert("Korttipelit", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+        .alert("Lautapelit", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
         .onOpenURL { url in
@@ -102,7 +126,7 @@ struct ContentView: View {
                 } else {
                     roomLobby.transition(.opacity)
                 }
-            case .table: EmptyView()
+            case .table, .fiveSeconds: EmptyView()
             }
         }
         .animation(.easeInOut(duration: 0.24), value: screen)
@@ -115,7 +139,7 @@ struct ContentView: View {
                     HStack(spacing: 12) {
                         BrandMark(size: 30, color: AppPalette.ink)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Korttipelit").font(.system(size: 18, weight: .semibold))
+                            Text("Lautapelit").font(.system(size: 18, weight: .semibold))
                             Text("Klassikot korttipöydässä").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                         }
                         Spacer()
@@ -197,7 +221,7 @@ struct ContentView: View {
                     room = nil
                     withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) { screen = .createRoom }
                 } label: {
-                    homeAction(title: kind.rawValue, detail: kind.subtitle, icon: kind == .kakkahousu ? "suit.spade.fill" : "suit.club.fill", prominent: false)
+                    homeAction(title: kind.rawValue, detail: kind.subtitle, icon: kind == .fiveSeconds ? "timer" : (kind == .kakkahousu ? "suit.spade.fill" : "suit.club.fill"), prominent: false)
                 }
                 .buttonStyle(.plain)
             }
@@ -315,6 +339,16 @@ struct ContentView: View {
                         }.buttonStyle(.plain).foregroundStyle(AppPalette.ink)
                     }
                     if selectedGame == .kakkahousu { rulesPicker }
+                    if selectedGame == .fiveSeconds {
+                        Toggle(isOn: $fiveSecondsSpecialCardsEnabled) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Ohitus- ja vaihtokortit").font(.system(size: 15, weight: .semibold))
+                                Text("Oletuksena pois käytöstä").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                            }
+                        }
+                        .tint(AppPalette.accent)
+                        .padding(15).cleanSurface(cornerRadius: 14)
+                    }
                     Button { Task { await createRoom() } } label: { primaryButton("Luo huone", icon: "plus") }
                         .disabled(session.isBusy)
                     if !session.isSignedIn {
@@ -374,6 +408,21 @@ struct ContentView: View {
                         .contentTransition(.opacity)
                     Text("Kaverit voivat skannata QR-koodin puhelimen Kameralla.")
                         .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                    if room?.game == .fiveSeconds {
+                        colorPicker
+                        if room?.hostID == playerID {
+                            Toggle(isOn: $fiveSecondsSpecialCardsEnabled) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Ohitus- ja vaihtokortit").font(.system(size: 14, weight: .semibold))
+                                    Text("Oletuksena pois käytöstä").font(.system(size: 11)).foregroundStyle(AppPalette.muted)
+                                }
+                            }
+                            .tint(AppPalette.accent)
+                            .onChange(of: fiveSecondsSpecialCardsEnabled) { _, enabled in
+                                Task { await updateFiveSecondsSettings(enabled) }
+                            }
+                        }
+                    }
                     VStack(spacing: 8) {
                         ForEach(Array((room?.players.values.sorted { $0.id < $1.id } ?? [])), id: \.id) { player in
                             HStack(spacing: 10) {
@@ -392,7 +441,7 @@ struct ContentView: View {
                     Button { Task { await beginGame() } } label: {
                         primaryButton(room?.hostID == playerID ? "Aloita peli" : "Odotetaan hostia", icon: "play.fill")
                     }
-                    .disabled(room?.hostID != playerID || (room?.players.count ?? 0) < 2)
+                    .disabled(room?.hostID != playerID || (room?.players.count ?? 0) < 2 || (room?.game == .fiveSeconds && !fiveSecondsColorsAreReady))
                     if (room?.players.count ?? 0) < 2 {
                         Text("Peli alkaa, kun vähintään yksi pelaaja liittyy.")
                             .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
@@ -407,6 +456,32 @@ struct ContentView: View {
             }
         }
         .task(id: room?.code) { await pollRoom() }
+    }
+
+    private var colorPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("VALITSE PELINAPPULAN VÄRI").font(.system(size: 10, weight: .bold)).tracking(1.2)
+            Text("Jokaisella pelaajalla on oma väri.").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+            HStack(spacing: 12) {
+                ForEach(FiveSecondsColor.allCases) { color in
+                    let occupied = room?.players.values.contains(where: { $0.id != playerID && $0.pieceColor == color.rawValue }) ?? false
+                    Button { Task { await chooseFiveSecondsColor(color) } } label: {
+                        Circle().fill(color.color.gradient).frame(width: 34, height: 34)
+                            .overlay(Circle().stroke(color == selectedFiveSecondsColor ? AppPalette.accent : (color == .white ? .black.opacity(0.22) : .white), lineWidth: color == selectedFiveSecondsColor ? 3 : 2))
+                            .overlay(Image(systemName: color == selectedFiveSecondsColor ? "checkmark" : "")
+                                .font(.system(size: 12, weight: .bold)).foregroundStyle(color.foreground))
+                            .opacity(occupied ? 0.25 : 1)
+                    }
+                    .buttonStyle(.plain).disabled(occupied)
+                    .accessibilityLabel("\(color.title)\(occupied ? ", varattu" : "")")
+                }
+            }
+            if let chosen = selectedFiveSecondsColor {
+                Text("Valittu: \(chosen.title)").font(.system(size: 12, weight: .medium)).foregroundStyle(AppPalette.muted)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(15).cleanSurface(cornerRadius: 14)
     }
 
     private var tableView: some View {
@@ -822,7 +897,7 @@ struct ContentView: View {
         guard let token = session.idToken else { errorMessage = "Kirjaudu sähköpostilla ennen online-huoneen luontia."; activeTab = 1; showSignIn = true; return }
         do {
             let person = PlayerInfo(id: playerID, name: session.displayName)
-            room = try await FirebaseService.shared.createRoom(game: selectedGame, player: person, token: token, rules: KakkahousuRules(faceCardsMinimum: faceCardsMinimum))
+            room = try await FirebaseService.shared.createRoom(game: selectedGame, player: person, token: token, rules: KakkahousuRules(faceCardsMinimum: faceCardsMinimum), fiveSecondsSpecialCardsEnabled: fiveSecondsSpecialCardsEnabled)
             screen = .room
         } catch { errorMessage = error.localizedDescription }
     }
@@ -843,6 +918,11 @@ struct ContentView: View {
             if Task.isCancelled || screen != .room { break }
             room = latest
             faceCardsMinimum = latest.kakkahousuFaceCardsMinimum ?? 7
+            fiveSecondsSpecialCardsEnabled = latest.fiveSecondsSpecialCardsEnabled ?? false
+            if latest.game == .fiveSeconds, let state = latest.fiveSecondsState {
+                screen = state.isOver ? .room : .fiveSeconds
+                continue
+            }
             if let state = latest.gameState {
                 game.apply(state, for: playerID)
                 if state.isOver {
@@ -865,6 +945,29 @@ struct ContentView: View {
 
     private func beginGame() async {
         guard var current = room, let token = session.idToken, current.hostID == playerID else { return }
+        if current.game == .fiveSeconds {
+            let selectedColors = current.players.values.compactMap(\.pieceColor)
+            guard current.players.count >= 2,
+                  selectedColors.count == current.players.count,
+                  Set(selectedColors).count == current.players.count else {
+                errorMessage = "Kaikkien pelaajien pitää valita eri pelinappulan väri ennen aloitusta."
+                return
+            }
+            let state = FiveSecondsState.newGame(
+                playerIDs: Array(current.players.keys),
+                hostID: current.hostID,
+                specialCardsEnabled: current.fiveSecondsSpecialCardsEnabled ?? false
+            )
+            current.gameState = nil
+            current.fiveSecondsState = state
+            current.updatedAt = Date().timeIntervalSince1970
+            do {
+                try await FirebaseService.shared.save(current, token: token)
+                room = current
+                screen = .fiveSeconds
+            } catch { errorMessage = error.localizedDescription }
+            return
+        }
         let rules = KakkahousuRules(faceCardsMinimum: current.kakkahousuFaceCardsMinimum ?? faceCardsMinimum)
         let state = game.startOnline(current.game, playerIDs: Array(current.players.keys), hostID: current.hostID, rules: rules)
         current.gameState = state
@@ -936,6 +1039,87 @@ struct ContentView: View {
         }
         suppressedLobbyRoundID = currentRoom.gameState?.roundID
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { screen = .room }
+    }
+
+    private func chooseFiveSecondsColor(_ color: FiveSecondsColor) async {
+        guard var current = room, current.game == .fiveSeconds,
+              current.fiveSecondsState == nil,
+              let token = session.idToken,
+              !current.players.values.contains(where: { $0.id != playerID && $0.pieceColor == color.rawValue }) else { return }
+        current.players[playerID]?.pieceColor = color.rawValue
+        current.updatedAt = Date().timeIntervalSince1970
+        do {
+            try await FirebaseService.shared.save(current, token: token)
+            room = current
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func updateFiveSecondsSettings(_ enabled: Bool) async {
+        guard var current = room, current.game == .fiveSeconds,
+              current.hostID == playerID, current.fiveSecondsState == nil,
+              let token = session.idToken else { return }
+        current.fiveSecondsSpecialCardsEnabled = enabled
+        current.updatedAt = Date().timeIntervalSince1970
+        do {
+            try await FirebaseService.shared.save(current, token: token)
+            room = current
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func updateFiveSeconds(_ change: (inout FiveSecondsState) -> Void) async {
+        guard var current = room, current.game == .fiveSeconds,
+              var state = current.fiveSecondsState,
+              let token = session.idToken else { return }
+        change(&state)
+        current.fiveSecondsState = state
+        current.updatedAt = Date().timeIntervalSince1970
+        do {
+            try await FirebaseService.shared.save(current, token: token)
+            room = current
+            if state.isOver {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) { screen = .room }
+            } else if screen == .room {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) { screen = .fiveSeconds }
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func drawFiveSecondsQuestion() async {
+        guard room?.fiveSecondsState?.readerID == playerID else { return }
+        await updateFiveSeconds { $0.drawQuestion(from: FiveSecondsPrompts.all) }
+    }
+
+    private func startFiveSecondsAnswer() async {
+        guard room?.fiveSecondsState?.responderID == playerID else { return }
+        await updateFiveSeconds { $0.startAnswering() }
+    }
+
+    private func finishFiveSecondsAnswer(_ transcript: String) async {
+        guard room?.fiveSecondsState?.responderID == playerID else { return }
+        await updateFiveSeconds { $0.finishAnswer(transcript) }
+    }
+
+    private func judgeFiveSecondsAnswer(_ correct: Bool) async {
+        guard room?.fiveSecondsState?.judgeID == playerID else { return }
+        await updateFiveSeconds { $0.resolveAnswer(correct: correct) }
+    }
+
+    private func resolveFiveSecondsSpecial() async {
+        guard room?.fiveSecondsState?.readerID == playerID else { return }
+        await updateFiveSeconds { $0.resolveSpecialCard() }
+    }
+
+    private func pollFiveSeconds() async {
+        guard let current = room, let token = session.idToken else { return }
+        for await latest in FirebaseService.shared.observeRoom(code: current.code, token: token) {
+            if Task.isCancelled || screen != .fiveSeconds { break }
+            guard latest.game == .fiveSeconds, latest.updatedAt >= (room?.updatedAt ?? 0) else { continue }
+            room = latest
+            if latest.fiveSecondsState?.isOver == true {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) { screen = .room }
+                break
+            }
+        }
     }
 
     private func pollGame() async {
