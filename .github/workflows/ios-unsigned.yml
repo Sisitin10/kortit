@@ -1,10 +1,48 @@
-name: Build and release Korttipelit IPA
+name: Build and release Korttipelit for iOS and Android
 
 on:
   workflow_dispatch:
   push:
 
 jobs:
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.6.0'
+      - name: Build installable APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          version="1.0.${GITHUB_RUN_NUMBER}"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/korttipelit-release.jks"
+            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/korttipelit-release.jks"
+          fi
+          gradle assembleRelease \
+            -PversionName="$version" \
+            -PversionCode="$GITHUB_RUN_NUMBER"
+          mkdir -p "$GITHUB_WORKSPACE/release-assets"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/release-assets/Korttipelit-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Korttipelit-android-apk
+          path: release-assets/Korttipelit-android.apk
+          if-no-files-found: error
+          retention-days: 14
+
   build:
     runs-on: xcode-27
     permissions:
@@ -95,18 +133,49 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: Korttipelit-unsigned-ipa
-          path: Korttipelit-unsigned.ipa
+          name: Korttipelit-ios-release-assets
+          path: |
+            Korttipelit-unsigned.ipa
+            Korttipelit-feather-source.json
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish iOS and Android releases
+    needs: [build, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Korttipelit-ios-release-assets
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: Korttipelit-android-apk
+          path: release-assets
+      - name: Add download instructions to run summary
+        run: |
+          {
+            echo '## Korttipelit build ready'
+            echo ''
+            echo '- **Android:** Download `Korttipelit-android.apk` from this release and install it on your phone.'
+            echo '- **iOS:** Download `Korttipelit-unsigned.ipa`; it needs signing before installation.'
+            echo '- **Feather:** `Korttipelit-feather-source.json`'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Publish GitHub Release
         if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_ID}"
-          gh release create "$tag" "$GITHUB_WORKSPACE/Korttipelit-unsigned.ipa" "$GITHUB_WORKSPACE/Korttipelit-feather-source.json" \
+          gh release create "$tag" \
+            "$GITHUB_WORKSPACE/release-assets/Korttipelit-unsigned.ipa" \
+            "$GITHUB_WORKSPACE/release-assets/Korttipelit-android.apk" \
+            "$GITHUB_WORKSPACE/release-assets/Korttipelit-feather-source.json" \
             --target "$GITHUB_SHA" \
             --title "Korttipelit build ${GITHUB_RUN_NUMBER}" \
-            --notes "Automaattinen iOS-build. IPA on allekirjoittamaton." \
+            --notes "Automaattinen iOS- ja Android-julkaisu. iOS-IPA on allekirjoittamaton; Android-APK on asennettava." \
             --latest

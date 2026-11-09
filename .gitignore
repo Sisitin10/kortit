@@ -5,3 +5,7 @@ DerivedData/
 build/
 Generated/
 .DS_Store
+.gradle/
+local.properties
+*.jks
+*.keystore
