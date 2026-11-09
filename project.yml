@@ -26,7 +26,8 @@ targets:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: Skannaa QR-koodi liittyäksesi pelikaverin huoneeseen.
         CFBundleURLTypes:
-          - CFBundleURLSchemes:
+          - CFBundleURLName: fi.chromehearts.cards.room
+            CFBundleURLSchemes:
               - chromehearts
     settings:
       base:

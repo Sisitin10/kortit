@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var showScanner = false
     @State private var showSignIn = false
     @State private var errorMessage: String?
+    @State private var pendingJoinCode: String?
+    @State private var isJoiningPendingRoom = false
+    @State private var copiedRoomCode = false
     @AppStorage("appearanceDarkMode") private var darkMode = false
     @AppStorage("brandPatternEnabled") private var brandPatternEnabled = false
     @AppStorage("quickHostEnabled") private var quickHostEnabled = false
@@ -60,11 +63,12 @@ struct ContentView: View {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
         .onOpenURL { url in
-            guard let code = url.pathComponents.last, code != "/" else { return }
-            roomCode = code.uppercased()
+            guard let code = roomCode(from: url) else { return }
+            pendingJoinCode = code
             activeTab = 0
+            room = nil
             screen = .room
-            Task { await joinRoom() }
+            if !session.isRestoringSession { Task { await joinPendingRoom() } }
         }
         .task {
             await session.restoreSession()
@@ -72,6 +76,10 @@ struct ContentView: View {
                 cardSwapPlayer = try? AVAudioPlayer(contentsOf: url)
                 cardSwapPlayer?.prepareToPlay()
             }
+            if pendingJoinCode != nil { await joinPendingRoom() }
+        }
+        .onChange(of: session.isSignedIn) { _, signedIn in
+            if signedIn, pendingJoinCode != nil { Task { await joinPendingRoom() } }
         }
         .onChange(of: game.drawSoundSequence) { _, _ in
             cardSwapPlayer?.currentTime = 0
@@ -102,10 +110,6 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.24), value: screen)
-        .alert("Kierros päättyi", isPresented: $game.isOver) {
-            Button("Uusi jako") { Task { await restartGame() } }
-            Button("Valmis", role: .cancel) { screen = .home; room = nil }
-        } message: { Text(game.notice) }
     }
 
     private var home: some View {
@@ -348,11 +352,32 @@ struct ContentView: View {
                             .background(.white, in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
                     }
-                    Text(room?.code ?? "------")
-                        .font(.system(size: 28, weight: .semibold, design: .monospaced))
-                        .tracking(4)
-                    Text("Jaa koodi tai QR-kutsu pelaajille.")
+                    Button {
+                        guard let code = room?.code else { return }
+                        UIPasteboard.general.string = code
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { copiedRoomCode = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation(.easeOut(duration: 0.2)) { copiedRoomCode = false }
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(room?.code ?? "------")
+                                .font(.system(size: 27, weight: .semibold, design: .monospaced))
+                                .tracking(4)
+                            Image(systemName: copiedRoomCode ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 15, weight: .medium))
+                        }
+                        .foregroundStyle(AppPalette.ink)
+                        .padding(.horizontal, 18).padding(.vertical, 12)
+                        .appGlass(cornerRadius: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(copiedRoomCode ? "Koodi kopioitu leikepöydälle" : "Kopioi huonekoodi")
+                    Text(copiedRoomCode ? "Kopioitu leikepöydälle" : "Paina huonekoodia kopioidaksesi sen.")
                         .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                        .contentTransition(.opacity)
+                    Text("Kaverit voivat skannata QR-koodin puhelimen Kameralla.")
+                        .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                     VStack(spacing: 8) {
                         ForEach(Array((room?.players.values.sorted { $0.id < $1.id } ?? [])), id: \.id) { player in
                             HStack(spacing: 10) {
@@ -806,7 +831,10 @@ struct ContentView: View {
             if Task.isCancelled || screen != .room { break }
             room = latest
             faceCardsMinimum = latest.kakkahousuFaceCardsMinimum ?? 7
-            if let state = latest.gameState { game.apply(state, for: playerID); screen = .table }
+            if let state = latest.gameState {
+                game.apply(state, for: playerID)
+                screen = state.isOver ? .room : .table
+            }
         }
     }
 
@@ -838,8 +866,40 @@ struct ContentView: View {
         current.gameState = game.snapshot(from: state, advanceTurn: advanceTurn)
         for id in Array(current.players.keys) { current.players[id]?.handCount = current.gameState?.hands[id]?.count ?? 0 }
         current.updatedAt = Date().timeIntervalSince1970
-        do { try await FirebaseService.shared.save(current, token: token); room = current }
+        do {
+            try await FirebaseService.shared.save(current, token: token)
+            room = current
+            if current.gameState?.isOver == true { screen = .room }
+        }
         catch { errorMessage = error.localizedDescription }
+    }
+
+    private func roomCode(from url: URL) -> String? {
+        let rawCode: String?
+        if url.scheme?.lowercased() == "chromehearts", url.host?.lowercased() == "join" {
+            rawCode = url.pathComponents.last
+        } else {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            rawCode = parts.count >= 2 && parts[parts.count - 2].lowercased() == "join" ? parts.last : nil
+        }
+        guard let rawCode,
+              rawCode.range(of: "^[A-Za-z0-9]{4,12}$", options: .regularExpression) != nil else { return nil }
+        return rawCode.uppercased()
+    }
+
+    private func joinPendingRoom() async {
+        guard !session.isRestoringSession, !isJoiningPendingRoom,
+              let code = pendingJoinCode else { return }
+        guard session.isSignedIn else {
+            activeTab = 1
+            showSignIn = true
+            return
+        }
+        isJoiningPendingRoom = true
+        pendingJoinCode = nil
+        roomCode = code
+        await joinRoom()
+        isJoiningPendingRoom = false
     }
 
     private func restartGame() async {
@@ -855,6 +915,7 @@ struct ContentView: View {
             if let state = latest.gameState, latest.updatedAt >= current.updatedAt {
                 game.apply(state, for: playerID)
                 room = latest
+                if state.isOver { screen = .room }
             }
         }
     }
