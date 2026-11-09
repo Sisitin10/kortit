@@ -73,18 +73,13 @@ struct ContentView: View {
         }
         .task {
             await session.restoreSession()
-            if let url = Bundle.main.url(forResource: "card-swap", withExtension: "mp3") {
-                cardSwapPlayer = try? AVAudioPlayer(contentsOf: url)
-                cardSwapPlayer?.prepareToPlay()
-            }
             if pendingJoinCode != nil { await joinPendingRoom() }
         }
         .onChange(of: session.isSignedIn) { _, signedIn in
             if signedIn, pendingJoinCode != nil { Task { await joinPendingRoom() } }
         }
         .onChange(of: game.drawSoundSequence) { _, _ in
-            cardSwapPlayer?.currentTime = 0
-            cardSwapPlayer?.play()
+            playCardSwapSound()
         }
         .onChange(of: game.isOver) { _, over in
             guard over else { return }
@@ -794,6 +789,22 @@ struct ContentView: View {
         game.draw()
         guard game.actionSucceeded else { return }
         Task { await publishGame(advanceTurn: completesKakkahousuTurn) }
+    }
+
+    private func playCardSwapSound() {
+        let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? audioSession.setActive(true)
+
+        if cardSwapPlayer == nil,
+           let url = Bundle.main.url(forResource: "card-swap", withExtension: "mp3") {
+            cardSwapPlayer = try? AVAudioPlayer(contentsOf: url)
+            cardSwapPlayer?.volume = 0.85
+            cardSwapPlayer?.prepareToPlay()
+        }
+
+        cardSwapPlayer?.currentTime = 0
+        cardSwapPlayer?.play()
     }
 
     private func playDroppedCards(_ cardIDs: [String]) -> Bool {
