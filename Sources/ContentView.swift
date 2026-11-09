@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var activeTab = 0
     @State private var selectedGame: GameKind = .kakkahousu
     @State private var room: OnlineRoom?
+    @State private var suppressedLobbyRoundID: String?
     @State private var playerID = UUID().uuidString
     @State private var roomCode = ""
     @State private var faceCardsMinimum = 7
@@ -419,12 +420,12 @@ struct ContentView: View {
             let tableCardHeight = tableCardWidth / 0.64
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    Button { screen = room == nil ? .home : .room } label: {
+                    Button { returnToLobby() } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(AppPalette.ink)
                             .frame(width: 40, height: 40)
-                            .cleanSurface(cornerRadius: 12)
+                            .appGlass(cornerRadius: 12)
                     }
                     .buttonStyle(.plain)
 
@@ -833,7 +834,12 @@ struct ContentView: View {
             faceCardsMinimum = latest.kakkahousuFaceCardsMinimum ?? 7
             if let state = latest.gameState {
                 game.apply(state, for: playerID)
-                screen = state.isOver ? .room : .table
+                if state.isOver {
+                    suppressedLobbyRoundID = state.roundID
+                    screen = .room
+                } else if state.roundID != suppressedLobbyRoundID {
+                    screen = .table
+                }
             }
         }
     }
@@ -857,6 +863,7 @@ struct ContentView: View {
             try await FirebaseService.shared.save(current, token: token)
             room = current
             game.apply(state, for: playerID)
+            suppressedLobbyRoundID = nil
             screen = .table
         } catch { errorMessage = error.localizedDescription }
     }
@@ -869,7 +876,10 @@ struct ContentView: View {
         do {
             try await FirebaseService.shared.save(current, token: token)
             room = current
-            if current.gameState?.isOver == true { screen = .room }
+            if let state = current.gameState, state.isOver {
+                suppressedLobbyRoundID = state.roundID
+                screen = .room
+            }
         }
         catch { errorMessage = error.localizedDescription }
     }
@@ -908,6 +918,15 @@ struct ContentView: View {
         await beginGame()
     }
 
+    private func returnToLobby() {
+        guard let currentRoom = room else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { screen = .home }
+            return
+        }
+        suppressedLobbyRoundID = currentRoom.gameState?.roundID
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { screen = .room }
+    }
+
     private func pollGame() async {
         guard let current = room, let token = session.idToken else { return }
         for await latest in FirebaseService.shared.observeRoom(code: current.code, token: token) {
@@ -915,7 +934,10 @@ struct ContentView: View {
             if let state = latest.gameState, latest.updatedAt >= current.updatedAt {
                 game.apply(state, for: playerID)
                 room = latest
-                if state.isOver { screen = .room }
+                if state.isOver {
+                    suppressedLobbyRoundID = state.roundID
+                    screen = .room
+                }
             }
         }
     }

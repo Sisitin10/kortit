@@ -76,6 +76,7 @@ struct KakkahousuRules: Codable, Equatable {
 }
 
 struct SharedGameState: Codable {
+    var roundID: String = UUID().uuidString
     var kind: GameKind
     var playerOrder: [String]
     var activePlayerID: String
@@ -94,11 +95,12 @@ struct SharedGameState: Codable {
     var kakkahousuPendingDraw: Bool = false
 
     private enum CodingKeys: String, CodingKey {
-        case kind, playerOrder, activePlayerID, hands, drawPile, tableCards, isOver, winnerID, kakkahousuRules
+        case roundID, kind, playerOrder, activePlayerID, hands, drawPile, tableCards, isOver, winnerID, kakkahousuRules
         case maijaPhase, maijaAttackerID, maijaDefenderID, maijaTrump, maijaTrumpCard, maijaDiscardCount, kakkahousuPendingDraw
     }
 
-    init(kind: GameKind, playerOrder: [String], activePlayerID: String, hands: [String: [PlayingCard]], drawPile: [PlayingCard], tableCards: [PlayingCard], isOver: Bool = false, winnerID: String? = nil, kakkahousuRules: KakkahousuRules = KakkahousuRules(), maijaPhase: MaijaPhase = .attack, maijaAttackerID: String? = nil, maijaDefenderID: String? = nil, maijaTrump: Suit? = nil, maijaTrumpCard: PlayingCard? = nil, maijaDiscardCount: Int = 0, kakkahousuPendingDraw: Bool = false) {
+    init(roundID: String = UUID().uuidString, kind: GameKind, playerOrder: [String], activePlayerID: String, hands: [String: [PlayingCard]], drawPile: [PlayingCard], tableCards: [PlayingCard], isOver: Bool = false, winnerID: String? = nil, kakkahousuRules: KakkahousuRules = KakkahousuRules(), maijaPhase: MaijaPhase = .attack, maijaAttackerID: String? = nil, maijaDefenderID: String? = nil, maijaTrump: Suit? = nil, maijaTrumpCard: PlayingCard? = nil, maijaDiscardCount: Int = 0, kakkahousuPendingDraw: Bool = false) {
+        self.roundID = roundID
         self.kind = kind
         self.playerOrder = playerOrder
         self.activePlayerID = activePlayerID
@@ -119,6 +121,7 @@ struct SharedGameState: Codable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        roundID = try values.decodeIfPresent(String.self, forKey: .roundID) ?? "legacy"
         kind = try values.decode(GameKind.self, forKey: .kind)
         playerOrder = try values.decodeIfPresent([String].self, forKey: .playerOrder) ?? []
         activePlayerID = try values.decodeIfPresent(String.self, forKey: .activePlayerID) ?? playerOrder.first ?? ""
