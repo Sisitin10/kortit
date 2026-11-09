@@ -511,10 +511,10 @@ struct ContentView: View {
                                     .frame(width: cardWidth)
                                     .offset(y: game.selected.contains(card.id) ? -16 : 0)
                                     .rotationEffect(.degrees(handAngle(for: card) * 2.5))
-                                    .zIndex(game.selected.contains(card.id) ? 1 : 0)
                             }
                             .buttonStyle(.plain)
                             .draggable(card.id)
+                            .zIndex(handZIndex(for: card))
                             .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
                         }
                     }
@@ -524,6 +524,7 @@ struct ContentView: View {
                     .padding(.bottom, 12)
                 }
                 .frame(height: min(205, proxy.size.height * 0.30))
+                .scrollClipDisabled()
                 .animation(.spring(response: 0.32, dampingFraction: 0.82), value: game.selected)
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: game.shouldPromptToDraw)
                 .padding(.bottom, max(12, proxy.safeAreaInsets.bottom))
@@ -740,6 +741,11 @@ struct ContentView: View {
     private func handAngle(for card: PlayingCard) -> Double {
         guard game.hand.count > 1, let index = game.hand.firstIndex(of: card) else { return 0 }
         return Double(index - game.hand.count / 2) * 1.7
+    }
+
+    private func handZIndex(for card: PlayingCard) -> Double {
+        guard let index = game.hand.firstIndex(of: card) else { return 0 }
+        return Double(index) + (game.selected.contains(card.id) ? 1_000 : 0)
     }
 
     private func playOrPickUpTable() {
