@@ -1,33 +1,31 @@
 # Korttipelit
 
-Portrait-iOS-korttipelisovellus Kakkahousulle ja Mustalle Maijalle. Sovelluksen ilme on vaalea ja hillitty; Chrome Hearts -korttipakka ja käyttäjän logo ovat teeman yksityiskohtia.
+Portrait-muotoinen iOS-korttipelisovellus Kakkahousulle ja Mustalle Maijalle. Käyttöliittymä on suomeksi, ja korttipakan ulkoasussa käytetään Chrome Hearts -teemaa. Sovelluksen vähimmäisversio on iOS 27.
 
-## Build ja GitHub Releases
+## Sovelluksen käyttö
 
-GitHub Actions rakentaa sovelluksen GitHubin Xcode 27 -runnerilla, joten paikallista Macia ei tarvita. Jokainen push rakentaa IPA:n ja tallentaa sen Actions-artifactiksi. Repon oletushaaran onnistunut build julkaisee uuden GitHub Releasen, johon liitetään IPA ja Feather-lähde.
+- **Pelit:** näytä voitot ja tappiot, isännöi uutta huonetta tai liity peliin skannaamalla QR-koodi. Skannerista voi vaihtaa huonekoodin syöttöön.
+- **Isännöi peliä:** valitse Kakkahousu tai Musta Maija. Kakkahousussa isäntä valitsee kuvakorttien säännön (7, 8 tai 9).
+- **Asetukset:** valitse profiilikuva, tumma tila, logotausta ja uloskirjautuminen. Tumma tila kääntää myös korttien kuvat.
+- **Pikaisäntä:** aloitusnäkymän plus-painikkeesta voi lisätä Kakkahousun yhden painalluksen pikakuvakkeen 7 kortin säännöllä.
 
-IPA:ta ei voi asentaa suoraan iPhoneen ennen Apple-allekirjoitusta ja provisioning-profiilia.
+Kakkahousussa kortit pelataan valitsemalla tai vetämällä ne pöytään. Korttien pelaamisen jälkeen pelaaja nostaa itse pakasta ennen vuoron siirtymistä. Jos kädessä ei ole sopivaa korttia, nostopainike tulee näkyviin. Mustassa Maijassa valtti näkyy pakan alla; patarouvaa ei voi kaataa. Kun hyökkäys on ratkaistu, hyökkääjä ja puolustaja täydentävät kätensä viiteen korttiin varaston salliessa.
 
-## Feather
+## GitHub Actions -buildit
 
-Lisää Featheriin tämä repo kerran; sen jälkeen Feather-lähde näyttää uusimman oletushaarasta julkaistun buildin:
+GitHub Actions generoi Xcode-projektin XcodeGenillä ja rakentaa allekirjoittamattoman IPA:n macOS/Xcode-runnerilla. Windows-konetta tai paikallista Macia ei tarvita. Oletushaaran onnistunut build julkaisee IPA:n GitHub Releasesiin ja päivittää Feather-lähteen. IPA vaatii allekirjoituksen ennen asennusta iPhoneen.
+
+Feather-lähde:
 
 `https://github.com/Sisitin10/kortit/releases/latest/download/Korttipelit-feather-source.json`
 
-Feather-lähde päivittyy automaattisesti jokaisen onnistuneen julkaisun yhteydessä. IPA on allekirjoittamaton, joten Feather tarvitsee oman allekirjoitusvarmenteesi ennen asennusta.
+## Firebase-asetukset
 
-## Firebase
-
-Kirjautuminen käyttää Firebase Authenticationin sähköposti-/salasanatapaa. Realtime Database synkronoi huoneet ja pelin tilan.
+Kirjautuminen käyttää Firebase Authenticationin sähköposti-/salasanakirjautumista. Realtime Database synkronoi huoneet ja pelin tilan.
 
 1. Ota Firebase Consolessa käyttöön **Authentication → Email/Password**.
-2. Luo **Realtime Database** ja julkaise sen Rules-näkymässä projektin `database.rules.json`.
-3. Rekisteröi iOS-sovellus bundle ID:llä `fi.chromehearts.cards`. Lisää ladattu `GoogleService-Info.plist` repon juureen.
-4. Lisää tietokannan URL Actions-secrets-kohtaan nimellä `FIREBASE_DATABASE_URL`, jos osoite ei ole plistissä.
+2. Luo Realtime Database ja julkaise `database.rules.json`-tiedoston säännöt.
+3. Rekisteröi iOS-sovellus bundle ID:llä `fi.chromehearts.cards` ja lisää `GoogleService-Info.plist` repon juureen.
+4. Lisää Firebase Realtime Database -osoite GitHub Actionsin repository secretiksi nimellä `FIREBASE_DATABASE_URL`, jos osoite ei ole plistissä.
 
-Nykyiset tietokantasäännöt sopivat kokeiluun: kirjautuneet käyttäjät voivat lukea ja kirjoittaa huoneen koko tilan, mukaan lukien pelaajien kädet. Tämä ei estä huijaamista eikä sovi kilpailupelin tuotantokäyttöön.
-
-## Pelit
-
-- **Kakkahousu:** viiden kortin käsi; host valitsee huoneeseen kuvakorttien 7/8/9-alarajan. Kakkahousua voi myös harjoitella yksin.
-- **Musta Maija:** online-peli vähintään kahdelle pelaajalle. Valtti ja patarouva huomioidaan pelin vuoroissa.
+Nykyisillä tietokantasäännöillä kirjautunut pelaaja voi lukea ja kirjoittaa huoneen koko tilan, mukaan lukien kaikkien pelaajien kädet. Säännöt soveltuvat testikäyttöön, eivät huijausta estävään julkaisuversioon.

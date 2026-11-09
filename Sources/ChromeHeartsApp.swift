@@ -9,7 +9,6 @@ struct ChromeHeartsApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(session)
-                .preferredColorScheme(.light)
         }
     }
 }

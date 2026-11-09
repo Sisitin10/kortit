@@ -1,14 +1,16 @@
 import SwiftUI
 import AudioToolbox
+import AVFoundation
 import UIKit
+import PhotosUI
 
-private enum Screen: Equatable { case home, room, table }
+private enum Screen: Equatable { case home, host, createRoom, room, table }
 
 private enum AppPalette {
-    static let ink = Color(red: 0.13, green: 0.13, blue: 0.13)
-    static let muted = Color(red: 0.42, green: 0.41, blue: 0.39)
+    static let ink = Color.primary
+    static let muted = Color.secondary
     static let accent = Color(red: 0.40, green: 0.13, blue: 0.16)
-    static let paper = Color(red: 0.94, green: 0.945, blue: 0.95)
+    static let paper = Color(uiColor: .tertiarySystemBackground)
 }
 
 struct ContentView: View {
@@ -21,10 +23,18 @@ struct ContentView: View {
     @State private var playerID = UUID().uuidString
     @State private var roomCode = ""
     @State private var faceCardsMinimum = 7
-    @State private var showNewGame = false
     @State private var showScanner = false
     @State private var showSignIn = false
     @State private var errorMessage: String?
+    @AppStorage("appearanceDarkMode") private var darkMode = false
+    @AppStorage("brandPatternEnabled") private var brandPatternEnabled = false
+    @AppStorage("quickHostEnabled") private var quickHostEnabled = false
+    @AppStorage("gamesWon") private var gamesWon = 0
+    @AppStorage("gamesLost") private var gamesLost = 0
+    @AppStorage("profilePhotoData") private var profilePhotoData = ""
+    @State private var showQuickHostSettings = false
+    @State private var selectedProfilePhoto: PhotosPickerItem?
+    @State private var cardSwapPlayer: AVAudioPlayer?
 
     var body: some View {
         Group {
@@ -36,31 +46,16 @@ struct ContentView: View {
                 .tabItem { Label("Pelit", systemImage: "suit.spade.fill") }
                 .tag(0)
             accountTab
-                .tabItem { Label("Tili", systemImage: "person.crop.circle") }
+                .tabItem { Label("Asetukset", systemImage: "gearshape") }
                 .tag(1)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppCanvas().ignoresSafeArea())
-        .overlay {
-            if screen != .table, showNewGame {
-                gameModeOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(2)
-            }
-        }
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: showNewGame)
         .tint(AppPalette.ink)
         .sheet(isPresented: $showSignIn) { signInSheet }
-        .sheet(isPresented: $showScanner) {
-            QRScanner { code in
-                roomCode = code
-                showScanner = false
-                Task { await joinRoom() }
-            }
-            .ignoresSafeArea()
-        }
+        .sheet(isPresented: $showScanner) { scannerSheet }
         .alert("Korttipelit", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
@@ -71,15 +66,32 @@ struct ContentView: View {
             screen = .room
             Task { await joinRoom() }
         }
-        .task { await session.restoreSession() }
-        .preferredColorScheme(.light)
+        .task {
+            await session.restoreSession()
+            if let url = Bundle.main.url(forResource: "card-swap", withExtension: "mp3") {
+                cardSwapPlayer = try? AVAudioPlayer(contentsOf: url)
+                cardSwapPlayer?.prepareToPlay()
+            }
+        }
+        .onChange(of: game.drawSoundSequence) { _, _ in
+            cardSwapPlayer?.currentTime = 0
+            cardSwapPlayer?.play()
+        }
+        .onChange(of: game.isOver) { _, over in
+            guard over else { return }
+            if game.notice.localizedCaseInsensitiveContains("voitit") { gamesWon += 1 } else { gamesLost += 1 }
+        }
+        .preferredColorScheme(darkMode ? .dark : .light)
     }
 
     private var gameTab: some View {
         ZStack {
             AppCanvas()
+            if brandPatternEnabled { BrandPatternBackground() }
             switch screen {
             case .home: home.transition(.opacity)
+            case .host: hostMenu.transition(.move(edge: .trailing).combined(with: .opacity))
+            case .createRoom: createRoomView.transition(.move(edge: .trailing).combined(with: .opacity))
             case .room:
                 if room == nil {
                     joinRoomView.transition(.opacity)
@@ -99,151 +111,139 @@ struct ContentView: View {
     private var home: some View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 11) {
-                        BrandMark(size: 28, color: AppPalette.ink)
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack(spacing: 12) {
+                        BrandMark(size: 30, color: AppPalette.ink)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Korttipelit").font(.system(size: 17, weight: .semibold))
-                            Text("Kakkahousu · Musta Maija").font(.system(size: 12, weight: .regular)).foregroundStyle(AppPalette.muted)
+                            Text("Korttipelit").font(.system(size: 18, weight: .semibold))
+                            Text("Klassikot korttipöydässä").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                         }
                         Spacer()
+                        Button { showQuickHostSettings = true } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 17, weight: .medium))
+                                .frame(width: 42, height: 42)
+                                .appGlass(cornerRadius: 21)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Lisää pikakuvake")
                     }
                     .padding(.top, 12)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Valitse peli").font(.system(size: 27, weight: .semibold))
-                        Text("Klassikot omalla korttipakalla.").font(.system(size: 15)).foregroundStyle(AppPalette.muted)
-                    }
-                    .padding(.top, 8)
-
-                    VStack(spacing: 14) {
-                        ForEach(GameKind.allCases) { kind in
-                            Button {
-                                selectedGame = kind
-                                showNewGame = true
-                            } label: {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    HStack {
-                                        Text(kind == .kakkahousu ? "KLASSIKKO 01" : "KLASSIKKO 02")
-                                            .font(.system(size: 10, weight: .semibold)).tracking(1.2).foregroundStyle(AppPalette.muted)
-                                        Spacer()
-                                        Text(kind == .kakkahousu ? "♠" : "♣")
-                                            .font(.system(size: 24, weight: .regular)).foregroundStyle(AppPalette.accent)
-                                    }
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(kind.rawValue).font(.system(size: 22, weight: .semibold))
-                                        Text(kind.subtitle).font(.system(size: 14)).foregroundStyle(AppPalette.muted)
-                                    }
-                                    HStack(spacing: 7) {
-                                        Text("PELAA").font(.system(size: 10, weight: .semibold)).tracking(1)
-                                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold))
-                                    }
-                                    .foregroundStyle(AppPalette.accent)
-                                }
-                                .foregroundStyle(AppPalette.ink)
-                                .padding(18)
-                                .frame(maxWidth: .infinity, minHeight: 142, alignment: .leading)
-                                .cleanSurface(cornerRadius: 16)
-                            }
-                            .buttonStyle(.plain)
-                            .scaleEffect(showNewGame && selectedGame == kind ? 0.985 : 1)
-                            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: showNewGame)
-                        }
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Pelikutsut").font(.system(size: 29, weight: .semibold))
+                        Text("Valitse pöytä ja kutsu ystävät mukaan.").font(.system(size: 14)).foregroundStyle(AppPalette.muted)
                     }
 
-                    Button {
-                        room = nil
-                        screen = .room
-                    } label: {
-                        HStack(spacing: 13) {
-                            Image(systemName: "qrcode.viewfinder").font(.system(size: 19, weight: .medium)).foregroundStyle(AppPalette.accent)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Liity huoneeseen").font(.system(size: 15, weight: .semibold))
-                                Text("Huonekoodilla tai QR-koodilla").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(AppPalette.muted)
-                        }
-                        .foregroundStyle(AppPalette.ink)
-                        .padding(16)
-                        .cleanSurface(cornerRadius: 16)
+                    HStack(spacing: 12) {
+                        statTile(title: "VOITOT", value: gamesWon, color: Color(red: 0.12, green: 0.48, blue: 0.28), icon: "trophy")
+                        statTile(title: "TAPPIOIT", value: gamesLost, color: Color(red: 0.66, green: 0.16, blue: 0.20), icon: "flag")
                     }
-                    .buttonStyle(.plain)
+
+                    VStack(spacing: 12) {
+                        Button {
+                            if quickHostEnabled {
+                                selectedGame = .kakkahousu
+                                faceCardsMinimum = 7
+                                Task { await createRoom() }
+                            } else {
+                                withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) { screen = .host }
+                            }
+                        } label: {
+                            homeAction(title: quickHostEnabled ? "Pikaisäntä · Kakkahousu" : "Isännöi peliä", detail: quickHostEnabled ? "Kakkahousu · 7 kortin sääntö" : "Valitse peli ja huoneen säännöt", icon: "person.2.fill", prominent: true)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            room = nil
+                            roomCode = ""
+                            showScanner = true
+                        } label: {
+                            homeAction(title: "Liity peliin", detail: "Skannaa QR-koodi tai käytä huonekoodia", icon: "qrcode.viewfinder", prominent: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if quickHostEnabled {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bolt.fill").foregroundStyle(AppPalette.accent)
+                            Text("PIKAKUTSU").font(.system(size: 10, weight: .semibold)).tracking(1.4)
+                            Text("Kakkahousu · 7 kortin sääntö").font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .cleanSurface(cornerRadius: 14)
+                    }
                 }
                 .padding(.horizontal, 22)
-                .padding(.bottom, 20)
+                .padding(.bottom, 28)
                 .frame(maxWidth: 540)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
             }
         }
+        .sheet(isPresented: $showQuickHostSettings) { quickHostSheet }
     }
 
-    private var gameModeOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.24)
-                .ignoresSafeArea()
-                .onTapGesture { showNewGame = false }
-
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(selectedGame.rawValue)
-                        .font(.system(size: 21, weight: .semibold))
-                    Text("Valitse, miten haluat pelata.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppPalette.muted)
-                }
-                .padding(.bottom, 4)
-
-                if selectedGame == .kakkahousu {
-                    modeChoice("Harjoittele yksin", detail: "Pelaa heti ilman huonetta", icon: "person") {
-                        showNewGame = false
-                        game.start(selectedGame, rules: KakkahousuRules(faceCardsMinimum: faceCardsMinimum))
-                        room = nil
-                        screen = .table
-                    }
-                }
-
-                modeChoice("Luo online-huone", detail: "Kutsu ystävät koodilla tai QR:llä", icon: "person.2") {
-                    showNewGame = false
-                    Task { await createRoom() }
-                }
-                modeChoice("Liity huoneeseen", detail: "Käytä huonekoodia tai QR-kutsua", icon: "qrcode") {
-                    showNewGame = false
+    private var hostMenu: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            pageHeader("Isännöi peliä") { withAnimation { screen = .home } }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Valitse peli").font(.system(size: 28, weight: .semibold))
+                Text("Luo huone ja jaa kutsu QR-koodilla.").font(.system(size: 14)).foregroundStyle(AppPalette.muted)
+            }
+            ForEach(GameKind.allCases) { kind in
+                Button {
+                    selectedGame = kind
                     room = nil
-                    screen = .room
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) { screen = .createRoom }
+                } label: {
+                    homeAction(title: kind.rawValue, detail: kind.subtitle, icon: kind == .kakkahousu ? "suit.spade.fill" : "suit.club.fill", prominent: false)
                 }
+                .buttonStyle(.plain)
             }
-            .padding(20)
-            .frame(maxWidth: 360)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.black.opacity(0.08), lineWidth: 1))
-            .padding(.horizontal, 28)
-            .shadow(color: .black.opacity(0.14), radius: 28, y: 12)
-            .accessibilityAddTraits(.isModal)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .frame(maxWidth: 540, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity)
     }
 
-    private func modeChoice(_ title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 13) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(AppPalette.accent)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(AppPalette.ink)
-                    Text(detail).font(.system(size: 12)).foregroundStyle(AppPalette.muted)
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(AppPalette.muted)
+    private func statTile(title: String, value: Int, color: Color, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 9, weight: .semibold)).tracking(1.1).foregroundStyle(AppPalette.muted)
+                Text("\(value)").font(.system(size: 24, weight: .semibold, design: .rounded)).foregroundStyle(color)
             }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 62)
-            .background(AppPalette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: showNewGame)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cleanSurface(cornerRadius: 15)
+    }
+
+    private func homeAction(title: String, detail: String, icon: String, prominent: Bool) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon).font(.system(size: 19, weight: .medium))
+                .foregroundStyle(prominent ? Color.white : AppPalette.accent)
+                .frame(width: 42, height: 42)
+                .background(prominent ? Color.white.opacity(0.13) : AppPalette.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 16, weight: .semibold))
+                Text(detail).font(.system(size: 12)).foregroundStyle(prominent ? Color.white.opacity(0.74) : AppPalette.muted)
+            }
+            Spacer(minLength: 3)
+            Image(systemName: "arrow.right").font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(prominent ? Color.white : AppPalette.ink)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 76)
+        .background {
+            if prominent { RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color.black) }
+            else { RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color(uiColor: .secondarySystemBackground)) }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.primary.opacity(prominent ? 0 : 0.07), lineWidth: 1))
     }
 
     private var joinRoomView: some View {
@@ -278,31 +278,6 @@ struct ContentView: View {
                     Button { Task { await joinRoom() } } label: { primaryButton("Liity huoneeseen", icon: "arrow.right") }
                         .disabled(roomCode.count < 4 || session.isBusy)
 
-                    Divider().overlay(Color.black.opacity(0.06)).padding(.vertical, 3)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Luo uusi huone").font(.system(size: 16, weight: .semibold))
-                        ForEach(GameKind.allCases) { kind in
-                            Button { selectedGame = kind } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: selectedGame == kind ? "largecircle.fill.circle" : "circle")
-                                        .foregroundStyle(selectedGame == kind ? AppPalette.accent : AppPalette.muted)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(kind.rawValue).font(.system(size: 14, weight: .medium))
-                                        Text(kind.subtitle).font(.system(size: 12)).foregroundStyle(AppPalette.muted)
-                                    }
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(AppPalette.ink)
-                        }
-                    }
-
-                    if selectedGame == .kakkahousu { rulesPicker }
-                    Button { Task { await createRoom() } } label: { primaryButton("Luo huone", icon: "plus") }
-                        .disabled(session.isBusy)
                     if !session.isSignedIn {
                         Text("Online-peli vaatii kirjautumisen. Voit kirjautua Tili-välilehdellä.")
                             .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
@@ -314,6 +289,43 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 18)
+            }
+        }
+    }
+
+    private var createRoomView: some View {
+        VStack(spacing: 0) {
+            pageHeader("Uusi huone") { withAnimation { screen = .host } }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Valitse pelin säännöt")
+                        .font(.system(size: 25, weight: .semibold))
+                    ForEach(GameKind.allCases) { kind in
+                        Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selectedGame = kind } } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: selectedGame == kind ? "largecircle.fill.circle" : "circle")
+                                    .foregroundStyle(selectedGame == kind ? AppPalette.accent : AppPalette.muted)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(kind.rawValue).font(.system(size: 16, weight: .semibold))
+                                    Text(kind.subtitle).font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                                }
+                                Spacer()
+                            }
+                            .padding(15).cleanSurface(cornerRadius: 14)
+                        }.buttonStyle(.plain).foregroundStyle(AppPalette.ink)
+                    }
+                    if selectedGame == .kakkahousu { rulesPicker }
+                    Button { Task { await createRoom() } } label: { primaryButton("Luo huone", icon: "plus") }
+                        .disabled(session.isBusy)
+                    if !session.isSignedIn {
+                        Text("Kirjaudu sisään avataksesi online-huoneen.")
+                            .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                    }
+                }
+                .padding(20).cleanSurface(cornerRadius: 18)
+                .padding(.horizontal, 18).padding(.vertical, 18)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -412,16 +424,32 @@ struct ContentView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 6) {
                         Button {
-                            game.draw()
-                            if game.actionSucceeded {
-                                if room == nil { AudioServicesPlaySystemSound(1104) }
-                                Task { await publishGame(advanceTurn: false) }
-                            }
+                            drawFromDeck()
                         } label: {
-                            CardBackView().frame(width: tableCardWidth, height: tableCardHeight)
+                            ZStack {
+                                if game.game == .mustaMaija, let trump = game.maijaTrumpCard {
+                                    if game.faceDownDeckCount > 0 {
+                                        PlayingCardView(card: trump)
+                                            .frame(width: tableCardWidth, height: tableCardHeight)
+                                            .rotationEffect(.degrees(90))
+                                            .offset(y: tableCardHeight * 0.3)
+                                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                    } else {
+                                        PlayingCardView(card: trump)
+                                            .frame(width: tableCardWidth, height: tableCardHeight)
+                                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                                    }
+                                }
+                                if game.faceDownDeckCount > 0 {
+                                    CardBackView().frame(width: tableCardWidth, height: tableCardHeight)
+                                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                                }
+                            }
+                            .frame(width: tableCardWidth, height: tableCardHeight)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .disabled(!game.turn)
+                        .disabled(!game.canDrawFromDeck)
                     }
 
                     Spacer(minLength: 0)
@@ -435,11 +463,8 @@ struct ContentView: View {
                                 .offset(x: CGFloat(seed % 5 - 2) * 4, y: CGFloat(seed % 4) * 4)
                                 .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .scale).combined(with: .opacity), removal: .opacity))
                         }
-                        if game.tableCards.isEmpty, let trump = game.maijaTrumpCard {
-                            PlayingCardView(card: trump).frame(width: tableCardWidth)
-                        }
                     }
-                    .frame(width: tableCardWidth + 32, height: tableCardHeight + 22)
+                    .frame(width: tableCardWidth, height: tableCardHeight)
                     .contentShape(Rectangle())
                     .onTapGesture { playOrPickUpTable() }
                     .dropDestination(for: String.self) { cardIDs, _ in playDroppedCards(cardIDs) }
@@ -451,10 +476,23 @@ struct ContentView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, max(16, proxy.size.height * 0.025))
 
-                Text(game.notice)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppPalette.ink)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 7) {
+                    Text(game.notice)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppPalette.ink)
+                        .multilineTextAlignment(.center)
+                    if game.shouldPromptToDraw {
+                        Button { drawFromDeck() } label: {
+                            Label("Nosta kortti", systemImage: "arrow.down.to.line")
+                                .font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 9)
+                                .appGlass(cornerRadius: 17)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppPalette.ink)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -487,9 +525,16 @@ struct ContentView: View {
                 }
                 .frame(height: min(205, proxy.size.height * 0.30))
                 .animation(.spring(response: 0.32, dampingFraction: 0.82), value: game.selected)
+                .animation(.spring(response: 0.34, dampingFraction: 0.8), value: game.shouldPromptToDraw)
                 .padding(.bottom, max(12, proxy.safeAreaInsets.bottom))
             }
             .foregroundStyle(AppPalette.ink)
+            .background {
+                ZStack {
+                    AppCanvas()
+                    if brandPatternEnabled { BrandPatternBackground() }
+                }
+            }
             .task(id: room?.code) { await pollGame() }
         }
     }
@@ -497,48 +542,53 @@ struct ContentView: View {
     private var accountTab: some View {
         ZStack {
             AppCanvas()
+            if brandPatternEnabled { BrandPatternBackground() }
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 11) {
-                        BrandMark(size: 28, color: AppPalette.ink)
-                        Text("Tili").font(.system(size: 23, weight: .semibold))
+                    Text("Asetukset").font(.system(size: 29, weight: .semibold)).padding(.top, 14)
+                    HStack(spacing: 14) {
+                        PhotosPicker(selection: $selectedProfilePhoto, matching: .images) {
+                            profileAvatar(size: 58)
+                        }.buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(session.displayName).font(.system(size: 17, weight: .semibold))
+                            Text(session.isSignedIn ? session.email : "Vieraspelaaja")
+                                .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(AppPalette.muted)
                     }
-                    .padding(.top, 12)
+                    .padding(15).cleanSurface(cornerRadius: 16)
+                    .onTapGesture { if !session.isSignedIn { showSignIn = true } }
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(session.isSignedIn ? "Kirjautunut" : "Kirjaudu online-peliä varten")
-                            .font(.system(size: 17, weight: .semibold))
-                        if session.isSignedIn {
-                            Text(session.displayName).font(.system(size: 14)).foregroundStyle(AppPalette.muted)
-                        } else {
-                            Text("Tili tarvitaan huoneiden luomiseen ja niihin liittymiseen.")
-                                .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
-                            TextField("Näyttönimi", text: $session.displayName)
-                                .textContentType(.name)
-                                .padding(13)
-                                .background(AppPalette.paper, in: RoundedRectangle(cornerRadius: 12))
-                            TextField("Sähköposti", text: $session.email)
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .padding(13)
-                                .background(AppPalette.paper, in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 0) {
+                        settingsRow("Tumma tila", detail: "Myös korttien kuvat käännetään", icon: "moon.fill") {
+                            Toggle("Tumma tila", isOn: $darkMode).labelsHidden()
                         }
-                        if let message = session.message {
-                            Text(message).font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                        Divider().padding(.leading, 46)
+                        settingsRow("Kuviotausta", detail: "Häivytetty logo pelipöydän taustalla", icon: "sparkles") {
+                            Toggle("Kuviotausta", isOn: $brandPatternEnabled).labelsHidden()
                         }
-                        Button { showSignIn = true } label: {
-                            primaryButton(session.isSignedIn ? "Avaa kirjautuminen" : "Kirjaudu tai luo tili", icon: "person.crop.circle")
-                        }
-                        Button("Jatka vieraana") { session.playAsGuest() }
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppPalette.muted)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 2)
                     }
-                    .padding(18)
-                    .cleanSurface(cornerRadius: 18)
+                    .padding(.horizontal, 14).cleanSurface(cornerRadius: 16)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("PELAAJAN TILI").font(.system(size: 10, weight: .semibold)).tracking(1.2).foregroundStyle(AppPalette.muted)
+                        if session.isSignedIn {
+                            Text("Kirjautuminen on tallennettu tälle laitteelle.")
+                                .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                            Button("Kirjaudu ulos", role: .destructive) { session.playAsGuest() }
+                                .font(.system(size: 14, weight: .medium))
+                        } else {
+                            Text("Kirjaudu sisään luodaksesi online-huoneita ja liittyäksesi niihin.")
+                                .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                            Button { showSignIn = true } label: { primaryButton("Kirjaudu tai luo tili", icon: "person.crop.circle") }
+                            Button("Jatka vieraana") { session.playAsGuest() }
+                                .font(.system(size: 13, weight: .medium)).foregroundStyle(AppPalette.muted)
+                        }
+                        if let message = session.message { Text(message).font(.system(size: 12)).foregroundStyle(AppPalette.muted) }
+                    }
+                    .padding(16).cleanSurface(cornerRadius: 16)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -546,6 +596,40 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
         }
+        .onChange(of: selectedProfilePhoto) { _, item in
+            Task {
+                guard let item,
+                      let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data),
+                      let jpeg = image.jpegData(compressionQuality: 0.78) else { return }
+                profilePhotoData = jpeg.base64EncodedString()
+            }
+        }
+    }
+
+    private func profileAvatar(size: CGFloat) -> some View {
+        Group {
+            if let data = Data(base64Encoded: profilePhotoData), let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.crop.circle.fill").resizable().scaledToFit().foregroundStyle(AppPalette.muted.opacity(0.55)).padding(8)
+            }
+        }
+        .frame(width: size, height: size).background(AppPalette.paper)
+        .clipShape(Circle()).overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+
+    private func settingsRow<Accessory: View>(_ title: String, detail: String, icon: String, @ViewBuilder accessory: () -> Accessory) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(AppPalette.accent).frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 14, weight: .medium))
+                Text(detail).font(.system(size: 11)).foregroundStyle(AppPalette.muted)
+            }
+            Spacer(minLength: 6)
+            accessory()
+        }
+        .padding(.vertical, 13)
     }
 
     private var rulesPicker: some View {
@@ -563,8 +647,64 @@ struct ContentView: View {
         .onChange(of: faceCardsMinimum) { _, value in Task { await updateRoomRules(value) } }
     }
 
+    private var quickHostSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Pikakuvake") {
+                    Toggle("Pikaisännöi Kakkahousu", isOn: $quickHostEnabled)
+                    Text("Lisää aloitusnäkymään yhden kosketuksen toiminnon, joka avaa Kakkahousu-huoneen 7 kortin säännöllä.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Aloitusnäkymän kuvake")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Valmis") { showQuickHostSettings = false } }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var scannerSheet: some View {
+        ZStack {
+            QRScanner { code in
+                roomCode = code
+                showScanner = false
+                Task { await joinRoom() }
+            }
+            VStack {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Liity peliin").font(.system(size: 18, weight: .semibold))
+                        Text("Kohdista kamera QR-koodiin").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { showScanner = false } label: {
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
+                            .frame(width: 38, height: 38).appGlass(cornerRadius: 19)
+                    }.buttonStyle(.plain)
+                }
+                .padding(16).appGlass(cornerRadius: 20).padding(.horizontal, 16).padding(.top, 12)
+                Spacer()
+                Button {
+                    showScanner = false
+                    room = nil
+                    screen = .room
+                } label: {
+                    Label("Liity huonekoodilla", systemImage: "number")
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(.horizontal, 20).frame(height: 50).appGlass(cornerRadius: 25)
+                }
+                .buttonStyle(.plain).padding(.bottom, 22)
+            }
+        }
+        .ignoresSafeArea()
+        .presentationBackground(.black)
+    }
+
     private var signInSheet: some View {
-        SignInPanel().environmentObject(session).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).preferredColorScheme(.light)
+        SignInPanel().environmentObject(session).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
     }
 
     private func pageHeader(_ title: String, back: @escaping () -> Void) -> some View {
@@ -592,7 +732,8 @@ struct ContentView: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
         .frame(height: 50)
-        .background(AppPalette.ink, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color.primary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .foregroundStyle(Color(uiColor: .systemBackground))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -613,7 +754,14 @@ struct ContentView: View {
         }
         guard game.actionSucceeded else { return }
         if room == nil { AudioServicesPlaySystemSound(1104) }
-        Task { await publishGame(advanceTurn: true) }
+        Task { await publishGame(advanceTurn: game.game == .mustaMaija || !game.mustRefillAfterPlay) }
+    }
+
+    private func drawFromDeck() {
+        let completesKakkahousuTurn = game.game == .kakkahousu && game.mustRefillAfterPlay
+        game.draw()
+        guard game.actionSucceeded else { return }
+        Task { await publishGame(advanceTurn: completesKakkahousuTurn) }
     }
 
     private func playDroppedCards(_ cardIDs: [String]) -> Bool {
@@ -623,7 +771,7 @@ struct ContentView: View {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { game.playSelected() }
         guard game.actionSucceeded else { return false }
         if room == nil { AudioServicesPlaySystemSound(1104) }
-        Task { await publishGame(advanceTurn: true) }
+        Task { await publishGame(advanceTurn: game.game == .mustaMaija || !game.mustRefillAfterPlay) }
         return true
     }
 
@@ -749,10 +897,10 @@ private struct SignInPanel: View {
                             Image(systemName: "arrow.right")
                         }
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(AppPalette.ink, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.primary, in: RoundedRectangle(cornerRadius: 14))
                     }
                     Button(create ? "Minulla on jo tili" : "Luo uusi tili") { create.toggle() }
                         .font(.system(size: 14, weight: .medium))

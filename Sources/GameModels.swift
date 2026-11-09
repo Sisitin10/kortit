@@ -142,6 +142,7 @@ final class CardGame: ObservableObject {
     @Published var game: GameKind = .kakkahousu
     @Published var hand: [PlayingCard] = []
     @Published var deckCount = 0
+    @Published var faceDownDeckCount = 0
     private var drawPile: [PlayingCard] = []
     @Published var tableCards: [PlayingCard] = []
     @Published var selected: Set<String> = []
@@ -149,12 +150,14 @@ final class CardGame: ObservableObject {
     @Published var notice = "Aloita uusi peli"
     @Published var isOver = false
     @Published var actionSucceeded = false
+    @Published var drawSoundSequence = 0
     @Published var faceCardsMinimum = 7
     @Published var maijaTrumpSuit: Suit?
     @Published var isMaijaDefense = false
     private var playerOrder: [String] = []
     private var playerID: String?
     private var keepTurnAfterPlay = false
+    @Published private(set) var mustRefillAfterPlay = false
     private var nextActivePlayerID: String?
     private var maijaPhase: MaijaPhase = .attack
     private var maijaAttackerID: String?
@@ -163,6 +166,7 @@ final class CardGame: ObservableObject {
     @Published private(set) var maijaTrumpCard: PlayingCard?
     private var maijaDiscardCount = 0
     private var remoteHandCounts: [String: Int] = [:]
+    private var sharedHands: [String: [PlayingCard]] = [:]
 
     func start(_ kind: GameKind, rules: KakkahousuRules = KakkahousuRules()) {
         game = kind
@@ -174,6 +178,7 @@ final class CardGame: ObservableObject {
         hand = Array(cards.prefix(initial)); cards.removeFirst(initial)
         drawPile = cards
         deckCount = drawPile.count
+        faceDownDeckCount = drawPile.count
         tableCards = []
         selected = []
         turn = true
@@ -181,13 +186,17 @@ final class CardGame: ObservableObject {
         notice = kind == .kakkahousu ? "Pelaa pöytään samanarvoisia kortteja." : "Pelaa kortti. Vältä ♠Q:ta!"
         playerOrder = []
         playerID = nil
+        keepTurnAfterPlay = false
+        nextActivePlayerID = nil
         maijaPhase = .attack
         maijaAttackerID = nil
         maijaDefenderID = nil
         maijaTrump = nil
         maijaTrumpCard = nil
+        mustRefillAfterPlay = false
         maijaDiscardCount = 0
         remoteHandCounts = [:]
+        sharedHands = [:]
     }
 
     func startOnline(_ kind: GameKind, playerIDs: [String], hostID: String, rules: KakkahousuRules = KakkahousuRules()) -> SharedGameState {
@@ -217,8 +226,12 @@ final class CardGame: ObservableObject {
         let firstIndex = order.firstIndex(of: firstPlayerID) ?? 0
         playerOrder = order
         playerID = hostID
+        keepTurnAfterPlay = false
+        nextActivePlayerID = nil
+        mustRefillAfterPlay = false
         drawPile = deck
         deckCount = deck.count + (trumpCard == nil ? 0 : 1)
+        faceDownDeckCount = deck.count
         hand = hands[hostID] ?? []
         tableCards = []
         selected = []
@@ -234,6 +247,7 @@ final class CardGame: ObservableObject {
         maijaTrumpSuit = trump
         isMaijaDefense = false
         remoteHandCounts = hands.mapValues(\.count)
+        sharedHands = hands
         return SharedGameState(kind: kind, playerOrder: order, activePlayerID: firstPlayerID, hands: hands, drawPile: deck, tableCards: [], isOver: false, winnerID: nil, kakkahousuRules: rules, maijaPhase: .attack, maijaAttackerID: firstPlayerID, maijaDefenderID: maijaDefenderID, maijaTrump: trump, maijaTrumpCard: trumpCard, maijaDiscardCount: 0)
     }
 
@@ -251,6 +265,7 @@ final class CardGame: ObservableObject {
         }
         drawPile = state.drawPile
         deckCount = newDeckCount
+        faceDownDeckCount = state.drawPile.count
         isOver = state.isOver
         faceCardsMinimum = state.kakkahousuRules.faceCardsMinimum
         maijaPhase = state.maijaPhase
@@ -262,16 +277,21 @@ final class CardGame: ObservableObject {
         maijaTrumpCard = state.maijaTrumpCard
         maijaDiscardCount = state.maijaDiscardCount
         remoteHandCounts = state.hands.mapValues(\.count)
+        sharedHands = state.hands
         selected.removeAll()
         turn = state.activePlayerID == id
+        mustRefillAfterPlay = state.kind == .kakkahousu && turn && hand.count < 5 && !state.drawPile.isEmpty
         notice = state.isOver ? (state.winnerID == id ? "Sinä voitit kierroksen!" : "Kierros päättyi.") : (turn ? "Sinun vuorosi." : "Odotetaan vastustajan vuoroa.")
-        if didDrawCards || didChangeTable { AudioServicesPlaySystemSound(1104) }
+        if didDrawCards { drawSoundSequence += 1 }
+        if didChangeTable { AudioServicesPlaySystemSound(1104) }
     }
 
     func snapshot(from state: SharedGameState, advanceTurn: Bool) -> SharedGameState {
         var updated = state
         guard let id = playerID else { return state }
         updated.hands[id] = hand
+        sharedHands[id] = hand
+        updated.hands = sharedHands
         remoteHandCounts[id] = hand.count
         updated.drawPile = drawPile
         updated.tableCards = tableCards
@@ -294,6 +314,9 @@ final class CardGame: ObservableObject {
                 }
             }
         }
+        if updated.kind == .kakkahousu, advanceTurn, mustRefillAfterPlay, deckCount > 0 {
+            updated.activePlayerID = id
+        }
         if let nextActivePlayerID {
             updated.activePlayerID = nextActivePlayerID
             self.nextActivePlayerID = nil
@@ -308,6 +331,7 @@ final class CardGame: ObservableObject {
             }
         }
         turn = updated.activePlayerID == id
+        if advanceTurn { mustRefillAfterPlay = false }
         keepTurnAfterPlay = false
         return updated
     }
@@ -340,6 +364,7 @@ final class CardGame: ObservableObject {
                 let clearsPile = (chosen.count == 4 && rank != 2) || (rank == 10 && top.map { (3...9).contains($0) } == true) || (rank == 1 && top.map { (11...13).contains($0) } == true)
                 if clearsPile { tableCards.removeAll(); keepTurnAfterPlay = true }
                 else { tableCards.append(contentsOf: chosen) }
+                mustRefillAfterPlay = deckCount > 0
             } else {
                 if maijaPhase == .attack {
                     maijaAttackerID = playerID
@@ -354,6 +379,7 @@ final class CardGame: ObservableObject {
                     }
                     maijaDiscardCount += chosen.count * 2
                     hand.append(contentsOf: remainingAttacks)
+                    if let playerID { sharedHands[playerID] = hand }
                     tableCards.removeAll()
                     maijaPhase = .attack
                     isMaijaDefense = false
@@ -361,11 +387,18 @@ final class CardGame: ObservableObject {
                     maijaAttackerID = allBeaten ? nextMaijaPlayer(after: maijaAttackerID) : nextMaijaPlayer(after: playerID)
                     maijaDefenderID = nextMaijaPlayer(after: maijaAttackerID)
                     nextActivePlayerID = maijaAttackerID
+                    var drewAttacker = false
+                    var drewDefender = false
+                    if let maijaAttackerID { drewAttacker = drawMaijaHandUpToFive(for: maijaAttackerID) }
+                    if let maijaDefenderID { drewDefender = drawMaijaHandUpToFive(for: maijaDefenderID) }
+                    if drewAttacker || drewDefender { drawSoundSequence += 1 }
                 }
             }
+            sharedHands[playerID ?? ""] = hand
+            remoteHandCounts = sharedHands.mapValues(\.count)
             selected.removeAll()
             notice = game == .kakkahousu ? (tableCards.isEmpty ? "Pino kaatui — pelaa uudelleen." : "Kortit pöytään.") : (maijaPhase == .defense ? "Hyökkäys pöydässä — puolustajan vuoro." : "Hyökkäys kaadettu — aloita seuraava.")
-            if hand.isEmpty && deckCount == 0 { isOver = true; notice = "Kierros päättyi!" }
+            if hand.isEmpty && deckCount == 0 { isOver = true; notice = "Sinä voitit kierroksen!" }
             actionSucceeded = true
         }
     }
@@ -375,16 +408,31 @@ final class CardGame: ObservableObject {
         guard turn else { notice = "Odota omaa vuoroasi."; return }
         guard deckCount > 0 || maijaTrumpCard != nil else { notice = "Pakka on tyhjä."; return }
         withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
-            let amount = min(game == .kakkahousu ? max(0, 5 - hand.count) : 1, deckCount + (maijaTrumpCard == nil ? 0 : 1))
+            let kakkahousuAmount = mustRefillAfterPlay
+                ? max(0, 5 - hand.count)
+                : (hand.contains(where: isLegalKakkahousuPlay) ? max(0, 5 - hand.count) : 1)
+            let amount = min(game == .kakkahousu ? kakkahousuAmount : 1, deckCount + (maijaTrumpCard == nil ? 0 : 1))
             guard amount > 0 else { notice = "Käsi on jo täysi."; return }
             var drawn = Array(drawPile.prefix(min(amount, drawPile.count)))
             if drawn.count < amount, let trumpCard = maijaTrumpCard { drawn.append(trumpCard); maijaTrumpCard = nil }
             hand.append(contentsOf: drawn)
             drawPile.removeFirst(min(amount, drawPile.count))
             deckCount = drawPile.count + (maijaTrumpCard == nil ? 0 : 1)
+            faceDownDeckCount = drawPile.count
+            if game == .kakkahousu, (hand.count >= 5 || deckCount == 0) { mustRefillAfterPlay = false }
             notice = amount == 1 ? "Kortti nostettu." : "\(amount) korttia nostettu."
+            drawSoundSequence += 1
             actionSucceeded = true
         }
+    }
+
+    var shouldPromptToDraw: Bool {
+        guard game == .kakkahousu, turn, deckCount > 0 else { return false }
+        return mustRefillAfterPlay || (!hand.isEmpty && !hand.contains(where: isLegalKakkahousuPlay))
+    }
+
+    var canDrawFromDeck: Bool {
+        turn && game == .kakkahousu && deckCount > 0 && (hand.count < 5 || shouldPromptToDraw)
     }
 
     func pickupTable() {
@@ -454,5 +502,23 @@ final class CardGame: ObservableObject {
             if stockRemains || count > 0 { return candidate }
         }
         return id
+    }
+
+    private func drawMaijaHandUpToFive(for id: String) -> Bool {
+        var cards = sharedHands[id] ?? []
+        let amount = min(max(0, 5 - cards.count), deckCount)
+        guard amount > 0 else { return false }
+        var drawn = Array(drawPile.prefix(min(amount, drawPile.count)))
+        if drawn.count < amount, let trump = maijaTrumpCard {
+            drawn.append(trump)
+            maijaTrumpCard = nil
+        }
+        cards.append(contentsOf: drawn)
+        drawPile.removeFirst(min(amount, drawPile.count))
+        sharedHands[id] = cards
+        if id == playerID { hand = cards }
+        deckCount = drawPile.count + (maijaTrumpCard == nil ? 0 : 1)
+        faceDownDeckCount = drawPile.count
+        return !drawn.isEmpty
     }
 }
