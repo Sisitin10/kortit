@@ -28,7 +28,11 @@ val hasReleaseSigning = !releaseKeystorePath.isNullOrBlank() &&
 
 android {
     namespace = "fi.chromehearts.cards.android"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 0
+        }
+    }
 
     defaultConfig {
         applicationId = "fi.chromehearts.cards.android"
